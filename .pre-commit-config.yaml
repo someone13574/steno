@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: forbid-crlf
+      - id: forbid-tabs
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.16.5
+    hooks:
+      - id: typos
+  - repo: local
+    hooks:
+      - id: fmt
+        name: fmt
+        entry: cargo fmt
+        language: system
+        types: [rust]
+        args: ["--"]
+      - id: no-gpui-glob
+        name: no-gpui-glob
+        entry: gpui::\*
+        language: pygrep
+        types: [rust]
