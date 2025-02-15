@@ -1,9 +1,13 @@
+use assets::Assets;
 use gpui::prelude::*;
 use gpui::{div, white, App, Application, Entity, Window};
 use theme::{BaseTheme, Theme};
 use window::TapperWindow;
 
+mod assets;
+mod components;
 mod theme;
+mod titlebar;
 mod window;
 
 pub const APP_ID: &str = "com.github.someone13574.tapper";
@@ -31,7 +35,7 @@ impl Render for MainView {
 }
 
 fn main() {
-    Application::new().run({
+    Application::new().with_assets(Assets).run({
         |cx| {
             cx.set_global(Theme::from(BaseTheme::default_dark()));
 

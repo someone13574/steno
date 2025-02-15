@@ -1,0 +1,104 @@
+use gpui::prelude::*;
+use gpui::{div, App, AppContext, Entity, MouseButton, Render, Window};
+
+use crate::components::button::Button;
+use crate::theme::ActiveTheme;
+use crate::window::TapperWindow;
+
+pub struct Titlebar<V: Render> {
+    window: Entity<TapperWindow<V>>,
+    buttons: Entity<TitlebarButtons>,
+}
+
+impl<V: Render> Titlebar<V> {
+    pub fn new(window: Entity<TapperWindow<V>>, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| {
+            Self {
+                window,
+                buttons: TitlebarButtons::new(cx),
+            }
+        })
+    }
+}
+
+impl<V: Render> Render for Titlebar<V> {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let parent = self.window.clone();
+
+        div()
+            .flex()
+            .w_full()
+            .items_center()
+            .justify_between()
+            .bg(cx.theme().csd_titlebar_background)
+            .border_b(cx.theme().csd_titlebar_border_width)
+            .border_color(cx.theme().csd_titlebar_border)
+            .px(cx.theme().csd_titlebar_padding_x)
+            .py(cx.theme().csd_titlebar_padding_y)
+            .rounded_t(cx.theme().csd_corner_radius)
+            .font_family(cx.theme().csd_font_family)
+            .text_color(cx.theme().csd_foreground)
+            .child(gpui::div())
+            .child("Tapper")
+            .child(
+                gpui::div()
+                    .w_0()
+                    .flex()
+                    .justify_end()
+                    .child(self.buttons.clone()),
+            )
+            .on_mouse_down(MouseButton::Left, move |_event, window, cx| {
+                parent.update(cx, |window, cx| {
+                    window.active_csd_event = true;
+                    cx.notify();
+                });
+
+                window.start_window_move();
+            })
+    }
+}
+
+struct TitlebarButtons {
+    pub minimize: Entity<Button>,
+    pub maximize: Entity<Button>,
+    pub close: Entity<Button>,
+}
+
+impl TitlebarButtons {
+    pub fn new(cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| {
+            Self {
+                minimize: Button::builder()
+                    .svg_icon("minimize.svg")
+                    .on_mouse_down(|_event, window, _cx| {
+                        window.minimize_window();
+                    })
+                    .build(cx),
+                maximize: Button::builder()
+                    .svg_icon("maximize.svg")
+                    .on_mouse_down(|_event, window, _cx| {
+                        window.zoom_window();
+                    })
+                    .build(cx),
+                close: Button::builder()
+                    .svg_icon("close.svg")
+                    .on_mouse_down(|_event, window, _cx| {
+                        window.remove_window();
+                    })
+                    .build(cx),
+            }
+        })
+    }
+}
+
+impl Render for TitlebarButtons {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_row()
+            .gap(cx.theme().csd_button_gap)
+            .child(self.minimize.clone())
+            .child(self.maximize.clone())
+            .child(self.close.clone())
+    }
+}

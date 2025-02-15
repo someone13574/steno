@@ -1,19 +1,20 @@
 use gpui::prelude::*;
 use gpui::{
-    div, point, px, size, transparent_black, App, Bounds, BoxShadow, Context, CursorStyle,
-    Decorations, Div, Entity, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, Pixels, Point, Render, ResizeEdge, Result, Styled, Tiling,
+    div, point, px, size, transparent_black, App, Bounds, BoxShadow, CursorStyle, Decorations, Div,
+    Entity, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ResizeEdge, Result, Tiling,
     TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
 };
 use smallvec::smallvec;
 
 use crate::theme::{ActiveTheme, Theme};
+use crate::titlebar::Titlebar;
 use crate::APP_ID;
 
 pub const CSD_RESIZE_EDGE_SIZE: Pixels = px(16.0);
 
 pub struct TapperWindow<V: Render> {
     main_view: Entity<V>,
+    titlebar: Entity<Titlebar<V>>,
 
     cursor_style: CursorStyle,
     pub active_csd_event: bool,
@@ -47,6 +48,7 @@ impl<V: Render> TapperWindow<V> {
             cx.new(|cx| {
                 Self {
                     main_view: build_root_view(window, cx),
+                    titlebar: Titlebar::new(cx.entity(), cx),
                     cursor_style: CursorStyle::default(),
                     active_csd_event: false,
                 }
@@ -126,6 +128,7 @@ impl<V: Render> Render for TapperWindow<V> {
                             tiling,
                             window.is_window_active() || self.active_csd_event,
                             cx.theme(),
+                            self.titlebar.clone(),
                             self.main_view.clone(),
                         ))
                 }
@@ -195,7 +198,13 @@ fn resize_edge_cursor(edge: ResizeEdge) -> CursorStyle {
     }
 }
 
-fn csd_div(tiling: Tiling, focused: bool, theme: &Theme, child: impl IntoElement) -> Div {
+fn csd_div<T: Render>(
+    tiling: Tiling,
+    focused: bool,
+    theme: &Theme,
+    titlebar: Entity<Titlebar<T>>,
+    child: impl IntoElement,
+) -> Div {
     div()
         .flex()
         .flex_col()
@@ -238,5 +247,6 @@ fn csd_div(tiling: Tiling, focused: bool, theme: &Theme, child: impl IntoElement
         })
         .cursor_default()
         .on_mouse_move(|_, _, cx| cx.stop_propagation())
+        .child(titlebar)
         .child(div().size_full().overflow_hidden().child(child))
 }
