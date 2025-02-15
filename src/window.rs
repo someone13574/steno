@@ -1,0 +1,242 @@
+use gpui::prelude::*;
+use gpui::{
+    div, point, px, size, transparent_black, App, Bounds, BoxShadow, Context, CursorStyle,
+    Decorations, Div, Entity, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, ParentElement, Pixels, Point, Render, ResizeEdge, Result, Styled, Tiling,
+    TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
+};
+use smallvec::smallvec;
+
+use crate::theme::{ActiveTheme, Theme};
+use crate::APP_ID;
+
+pub const CSD_RESIZE_EDGE_SIZE: Pixels = px(16.0);
+
+pub struct TapperWindow<V: Render> {
+    main_view: Entity<V>,
+
+    cursor_style: CursorStyle,
+    pub active_csd_event: bool,
+}
+
+impl<V: Render> TapperWindow<V> {
+    pub fn new(
+        cx: &mut App,
+        build_root_view: impl FnOnce(&mut Window, &mut Context<Self>) -> Entity<V>,
+    ) -> Result<WindowHandle<Self>> {
+        let window_options = WindowOptions {
+            titlebar: Some(TitlebarOptions {
+                title: Some("Tapper".into()),
+                ..Default::default()
+            }),
+            app_id: Some(APP_ID.to_string()),
+            window_min_size: Some(size(px(300.0), px(100.0))),
+            window_decorations: Some(
+                if cfg!(target_os = "linux")
+                    && std::env::var("WAYLAND_DISPLAY").is_ok_and(|v| !v.is_empty())
+                {
+                    WindowDecorations::Client
+                } else {
+                    WindowDecorations::Server
+                },
+            ),
+            ..Default::default()
+        };
+
+        cx.open_window(window_options, |window, cx| {
+            cx.new(|cx| {
+                Self {
+                    main_view: build_root_view(window, cx),
+                    cursor_style: CursorStyle::default(),
+                    active_csd_event: false,
+                }
+            })
+        })
+    }
+}
+
+impl<V: Render> Render for TapperWindow<V> {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let decorations = window.window_decorations();
+        let client_inset = cx.theme().csd_shadow_size.max(CSD_RESIZE_EDGE_SIZE);
+
+        if let Decorations::Client { .. } = decorations {
+            window.set_client_inset(client_inset);
+        }
+
+        div().size_full().bg(transparent_black()).map(|element| {
+            match decorations {
+                Decorations::Server => {
+                    element
+                        .bg(cx.theme().window_background)
+                        .overflow_hidden()
+                        .child(self.main_view.clone())
+                }
+                Decorations::Client { tiling } => {
+                    element
+                        .when(!tiling.top, |div| div.pt(client_inset))
+                        .when(!tiling.bottom, |div| div.pb(client_inset))
+                        .when(!tiling.left, |div| div.pl(client_inset))
+                        .when(!tiling.right, |div| div.pr(client_inset))
+                        .cursor(self.cursor_style)
+                        .on_mouse_move(cx.listener(
+                            move |this, event: &MouseMoveEvent, window, cx| {
+                                let new_cursor = if let Some(edge) = get_resize_edge(
+                                    event.position,
+                                    window.bounds(),
+                                    tiling,
+                                    cx.theme().csd_shadow_size,
+                                ) {
+                                    resize_edge_cursor(edge)
+                                } else {
+                                    CursorStyle::default()
+                                };
+
+                                if this.cursor_style != new_cursor || this.active_csd_event {
+                                    this.cursor_style = new_cursor;
+                                    this.active_csd_event = false;
+                                    cx.notify();
+                                }
+                            },
+                        ))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                                let new_cursor = if let Some(edge) = get_resize_edge(
+                                    event.position,
+                                    window.bounds(),
+                                    tiling,
+                                    cx.theme().csd_shadow_size,
+                                ) {
+                                    window.start_window_resize(edge);
+                                    this.active_csd_event = true;
+
+                                    resize_edge_cursor(edge)
+                                } else {
+                                    CursorStyle::default()
+                                };
+
+                                if this.cursor_style != new_cursor || this.active_csd_event {
+                                    this.cursor_style = new_cursor;
+                                    cx.notify();
+                                }
+                            }),
+                        )
+                        .child(csd_div(
+                            tiling,
+                            window.is_window_active() || self.active_csd_event,
+                            cx.theme(),
+                            self.main_view.clone(),
+                        ))
+                }
+            }
+        })
+    }
+}
+
+fn get_resize_edge(
+    position: Point<Pixels>,
+    bounds: Bounds<Pixels>,
+    tiling: Tiling,
+    shadow_size: Pixels,
+) -> Option<ResizeEdge> {
+    let resize_edge_outer = (shadow_size - CSD_RESIZE_EDGE_SIZE).max(px(0.0));
+    let window_bounds = resize_edge_outer + CSD_RESIZE_EDGE_SIZE;
+    let resize_edge_inner = window_bounds + CSD_RESIZE_EDGE_SIZE;
+
+    // Check for window obstruction
+    if (tiling.top || position.y > bounds.top() + window_bounds)
+        && (tiling.bottom || position.y < bounds.bottom() - window_bounds)
+        && (tiling.left || position.x > bounds.left() + window_bounds)
+        && (tiling.right || position.x < bounds.right() - window_bounds)
+    {
+        return None;
+    }
+
+    // Get resize edge
+    let top = !tiling.top && position.y > bounds.top() + resize_edge_outer;
+    let bottom = !tiling.bottom && position.y < bounds.bottom() - resize_edge_outer;
+    let left = !tiling.left && position.x > bounds.left() + resize_edge_outer;
+    let right = !tiling.right && position.x < bounds.right() - resize_edge_outer;
+
+    let top_inner = !tiling.top && position.y < bounds.top() + resize_edge_inner;
+    let bottom_inner = !tiling.bottom && position.y > bounds.bottom() - resize_edge_inner;
+    let left_inner = !tiling.left && position.x < bounds.left() + resize_edge_inner;
+    let right_inner = !tiling.right && position.x > bounds.right() - resize_edge_inner;
+
+    match (
+        top,
+        bottom,
+        left,
+        right,
+        top_inner,
+        bottom_inner,
+        left_inner,
+        right_inner,
+    ) {
+        (true, _, true, _, true, _, true, _) => Some(ResizeEdge::TopLeft),
+        (true, _, _, true, true, _, _, true) => Some(ResizeEdge::TopRight),
+        (_, true, true, _, _, true, true, _) => Some(ResizeEdge::BottomLeft),
+        (_, true, _, true, _, true, _, true) => Some(ResizeEdge::BottomRight),
+        (true, _, _, _, true, _, false, false) => Some(ResizeEdge::Top),
+        (_, true, _, _, _, true, false, false) => Some(ResizeEdge::Bottom),
+        (_, _, true, _, false, false, true, _) => Some(ResizeEdge::Left),
+        (_, _, _, true, false, false, _, true) => Some(ResizeEdge::Right),
+        _ => None,
+    }
+}
+
+fn resize_edge_cursor(edge: ResizeEdge) -> CursorStyle {
+    match edge {
+        ResizeEdge::Top | ResizeEdge::Bottom => CursorStyle::ResizeUpDown,
+        ResizeEdge::Left | ResizeEdge::Right => CursorStyle::ResizeLeftRight,
+        ResizeEdge::TopLeft | ResizeEdge::BottomRight => CursorStyle::ResizeUpLeftDownRight,
+        ResizeEdge::TopRight | ResizeEdge::BottomLeft => CursorStyle::ResizeUpRightDownLeft,
+    }
+}
+
+fn csd_div(tiling: Tiling, focused: bool, theme: &Theme, child: impl IntoElement) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .size_full()
+        .bg(theme.window_background)
+        .shadow(smallvec![BoxShadow {
+            color: if focused {
+                theme.csd_shadow_focused.into()
+            } else {
+                theme.csd_shadow_unfocused.into()
+            },
+            offset: point(px(0.0), px(0.0)),
+            blur_radius: theme.csd_shadow_size / 4.0,
+            spread_radius: px(0.0)
+        }])
+        .border_color(theme.csd_window_border)
+        .when(!tiling.top, |div| {
+            div.border_t(theme.csd_window_border_width)
+        })
+        .when(!tiling.bottom, |div| {
+            div.border_b(theme.csd_window_border_width)
+        })
+        .when(!tiling.left, |div| {
+            div.border_l(theme.csd_window_border_width)
+        })
+        .when(!tiling.right, |div| {
+            div.border_r(theme.csd_window_border_width)
+        })
+        .when(!tiling.top && !tiling.left, |div| {
+            div.rounded_tl(theme.csd_corner_radius)
+        })
+        .when(!tiling.top && !tiling.right, |div| {
+            div.rounded_tr(theme.csd_corner_radius)
+        })
+        .when(!tiling.bottom && !tiling.left, |div| {
+            div.rounded_bl(theme.csd_corner_radius)
+        })
+        .when(!tiling.bottom && !tiling.right, |div| {
+            div.rounded_br(theme.csd_corner_radius)
+        })
+        .cursor_default()
+        .on_mouse_move(|_, _, cx| cx.stop_propagation())
+        .child(div().size_full().overflow_hidden().child(child))
+}
