@@ -1,8 +1,8 @@
 use gpui::prelude::*;
 use gpui::{
     div, point, px, size, transparent_black, App, Bounds, BoxShadow, CursorStyle, Decorations, Div,
-    Entity, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ResizeEdge, Result, Tiling,
-    TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
+    Entity, FocusHandle, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ResizeEdge,
+    Result, Tiling, TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
 };
 use smallvec::smallvec;
 
@@ -15,7 +15,7 @@ pub const CSD_RESIZE_EDGE_SIZE: Pixels = px(16.0);
 pub struct TapperWindow<V: Render> {
     main_view: Entity<V>,
     titlebar: Entity<Titlebar<V>>,
-
+    focus_handle: FocusHandle,
     cursor_style: CursorStyle,
     pub active_csd_event: bool,
 }
@@ -23,7 +23,7 @@ pub struct TapperWindow<V: Render> {
 impl<V: Render> TapperWindow<V> {
     pub fn new(
         cx: &mut App,
-        build_root_view: impl FnOnce(&mut Window, &mut Context<Self>) -> Entity<V>,
+        build_root_view: impl FnOnce(FocusHandle, &mut Window, &mut Context<Self>) -> Entity<V>,
     ) -> Result<WindowHandle<Self>> {
         let window_options = WindowOptions {
             titlebar: Some(TitlebarOptions {
@@ -46,9 +46,12 @@ impl<V: Render> TapperWindow<V> {
 
         cx.open_window(window_options, |window, cx| {
             cx.new(|cx| {
+                let focus_handle = cx.focus_handle();
+
                 Self {
-                    main_view: build_root_view(window, cx),
+                    main_view: build_root_view(focus_handle.clone(), window, cx),
                     titlebar: Titlebar::new(cx.entity(), cx),
+                    focus_handle,
                     cursor_style: CursorStyle::default(),
                     active_csd_event: false,
                 }
@@ -66,74 +69,78 @@ impl<V: Render> Render for TapperWindow<V> {
             window.set_client_inset(client_inset);
         }
 
-        div().size_full().bg(transparent_black()).map(|element| {
-            match decorations {
-                Decorations::Server => {
-                    element
-                        .bg(cx.theme().window_background)
-                        .overflow_hidden()
-                        .child(self.main_view.clone())
+        div()
+            .track_focus(&self.focus_handle)
+            .size_full()
+            .bg(transparent_black())
+            .map(|element| {
+                match decorations {
+                    Decorations::Server => {
+                        element
+                            .bg(cx.theme().window_background)
+                            .overflow_hidden()
+                            .child(self.main_view.clone())
+                    }
+                    Decorations::Client { tiling } => {
+                        element
+                            .when(!tiling.top, |div| div.pt(client_inset))
+                            .when(!tiling.bottom, |div| div.pb(client_inset))
+                            .when(!tiling.left, |div| div.pl(client_inset))
+                            .when(!tiling.right, |div| div.pr(client_inset))
+                            .cursor(self.cursor_style)
+                            .on_mouse_move(cx.listener(
+                                move |this, event: &MouseMoveEvent, window, cx| {
+                                    let new_cursor = if let Some(edge) = get_resize_edge(
+                                        event.position,
+                                        window.bounds(),
+                                        tiling,
+                                        cx.theme().csd_shadow_size,
+                                    ) {
+                                        resize_edge_cursor(edge)
+                                    } else {
+                                        CursorStyle::default()
+                                    };
+
+                                    if this.cursor_style != new_cursor || this.active_csd_event {
+                                        this.cursor_style = new_cursor;
+                                        this.active_csd_event = false;
+                                        cx.notify();
+                                    }
+                                },
+                            ))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                                    let new_cursor = if let Some(edge) = get_resize_edge(
+                                        event.position,
+                                        window.bounds(),
+                                        tiling,
+                                        cx.theme().csd_shadow_size,
+                                    ) {
+                                        window.start_window_resize(edge);
+                                        this.active_csd_event = true;
+
+                                        resize_edge_cursor(edge)
+                                    } else {
+                                        CursorStyle::default()
+                                    };
+
+                                    if this.cursor_style != new_cursor || this.active_csd_event {
+                                        this.cursor_style = new_cursor;
+                                        cx.notify();
+                                    }
+                                }),
+                            )
+                            .child(csd_div(
+                                tiling,
+                                window.is_window_active() || self.active_csd_event,
+                                cx.theme(),
+                                self.titlebar.clone(),
+                                self.main_view.clone(),
+                            ))
+                    }
                 }
-                Decorations::Client { tiling } => {
-                    element
-                        .when(!tiling.top, |div| div.pt(client_inset))
-                        .when(!tiling.bottom, |div| div.pb(client_inset))
-                        .when(!tiling.left, |div| div.pl(client_inset))
-                        .when(!tiling.right, |div| div.pr(client_inset))
-                        .cursor(self.cursor_style)
-                        .on_mouse_move(cx.listener(
-                            move |this, event: &MouseMoveEvent, window, cx| {
-                                let new_cursor = if let Some(edge) = get_resize_edge(
-                                    event.position,
-                                    window.bounds(),
-                                    tiling,
-                                    cx.theme().csd_shadow_size,
-                                ) {
-                                    resize_edge_cursor(edge)
-                                } else {
-                                    CursorStyle::default()
-                                };
-
-                                if this.cursor_style != new_cursor || this.active_csd_event {
-                                    this.cursor_style = new_cursor;
-                                    this.active_csd_event = false;
-                                    cx.notify();
-                                }
-                            },
-                        ))
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                                let new_cursor = if let Some(edge) = get_resize_edge(
-                                    event.position,
-                                    window.bounds(),
-                                    tiling,
-                                    cx.theme().csd_shadow_size,
-                                ) {
-                                    window.start_window_resize(edge);
-                                    this.active_csd_event = true;
-
-                                    resize_edge_cursor(edge)
-                                } else {
-                                    CursorStyle::default()
-                                };
-
-                                if this.cursor_style != new_cursor || this.active_csd_event {
-                                    this.cursor_style = new_cursor;
-                                    cx.notify();
-                                }
-                            }),
-                        )
-                        .child(csd_div(
-                            tiling,
-                            window.is_window_active() || self.active_csd_event,
-                            cx.theme(),
-                            self.titlebar.clone(),
-                            self.main_view.clone(),
-                        ))
-                }
-            }
-        })
+            })
     }
 }
 
