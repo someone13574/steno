@@ -1,6 +1,7 @@
 use assets::Assets;
+use components::clamp::clamp;
 use gpui::prelude::*;
-use gpui::{div, App, Application, Entity, FocusHandle, Window};
+use gpui::{div, px, App, Application, Entity, FocusHandle, Window};
 use text_view::TextView;
 use theme::{BaseTheme, Theme};
 use window::TapperWindow;
@@ -35,7 +36,7 @@ impl Render for MainView {
             .size_full()
             .justify_center()
             .items_center()
-            .child(self.text_view.clone())
+            .child(clamp(px(400.0), px(400.0), 2.0, self.text_view.clone()))
     }
 }
 

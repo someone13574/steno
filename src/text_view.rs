@@ -124,6 +124,11 @@ impl TextView {
 impl Render for TextView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .items_center()
+            .justify_center()
             .track_focus(&self.focus_handle)
             .text_2xl()
             .child(StyledText::new(self.text.clone()).with_highlights(
