@@ -1,9 +1,7 @@
-use std::ops::Range;
-
 use gpui::prelude::*;
 use gpui::{
-    div, rgba, App, Entity, FocusHandle, HighlightStyle, KeyDownEvent, StyledText, TextStyle,
-    Window,
+    div, fill, px, rgba, size, App, Bounds, ElementId, Entity, FocusHandle, GlobalElementId,
+    KeyDownEvent, LayoutId, PaintQuad, Pixels, StyledText, TextRun, Window,
 };
 
 pub struct TextView {
@@ -11,7 +9,7 @@ pub struct TextView {
     char_head: usize,
     utf8_head: usize,
     over_inserted_stack: Vec<usize>,
-    runs: Vec<(bool, Range<usize>)>,
+    run_lens: Vec<(bool, usize)>,
     focus_handle: FocusHandle,
 }
 
@@ -23,23 +21,21 @@ impl TextView {
                 char_head: 0,
                 utf8_head: 0,
                 over_inserted_stack: vec![0],
-                runs: Vec::new(),
+                run_lens: Vec::new(),
                 focus_handle,
             }
         })
     }
 
     fn add_run(&mut self, correct: bool, utf8_len: usize, char_len: usize) {
-        if let Some((last_run_correct, last_run)) = self.runs.last_mut() {
+        if let Some((last_run_correct, last_run)) = self.run_lens.last_mut() {
             if *last_run_correct == correct {
-                last_run.end += utf8_len;
+                *last_run += utf8_len;
             } else {
-                self.runs
-                    .push((correct, self.utf8_head..self.utf8_head + utf8_len));
+                self.run_lens.push((correct, utf8_len));
             }
         } else {
-            self.runs
-                .push((correct, self.utf8_head..self.utf8_head + utf8_len));
+            self.run_lens.push((correct, utf8_len));
         }
 
         self.utf8_head += utf8_len;
@@ -106,14 +102,14 @@ impl TextView {
         }
 
         // Remove runs
-        let delete = if let Some((_, last_run)) = self.runs.last_mut() {
-            last_run.end -= unwind_len;
-            Range::is_empty(last_run)
+        let delete = if let Some((_, last_run_len)) = self.run_lens.last_mut() {
+            *last_run_len -= unwind_len;
+            *last_run_len == 0
         } else {
             false
         };
         if delete {
-            self.runs.pop();
+            self.run_lens.pop();
         }
 
         self.utf8_head -= unwind_len;
@@ -122,7 +118,7 @@ impl TextView {
 }
 
 impl Render for TextView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
@@ -131,27 +127,13 @@ impl Render for TextView {
             .justify_center()
             .track_focus(&self.focus_handle)
             .text_2xl()
-            .child(StyledText::new(self.text.clone()).with_highlights(
-                &TextStyle {
-                    font_family: "Sans".into(),
-                    color: rgba(0xffffff20).into(),
-                    ..window.text_style()
-                },
-                self.runs.iter().map(|(correct, run)| {
-                    (
-                        run.clone(),
-                        HighlightStyle {
-                            color: Some(if *correct {
-                                rgba(0xffffffff).into()
-                            } else {
-                                rgba(0xff0000ff).into()
-                            }),
-                            background_color: None,
-                            ..Default::default()
-                        },
-                    )
-                }),
-            ))
+            .font_family("Sans")
+            .text_color(rgba(0xffffff20))
+            .child(TextViewElement {
+                text: self.text.clone(),
+                runs: self.run_lens.clone(),
+                head: self.utf8_head,
+            })
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
                 match (
                     this.text.chars().nth(this.char_head),
@@ -212,5 +194,97 @@ impl Render for TextView {
 
                 cx.notify();
             }))
+    }
+}
+
+struct TextViewElement {
+    text: String,
+    runs: Vec<(bool, usize)>,
+    head: usize,
+}
+
+impl IntoElement for TextViewElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for TextViewElement {
+    type PrepaintState = Option<PaintQuad>;
+    type RequestLayoutState = StyledText;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let text_style = window.text_style();
+
+        let runs = self
+            .runs
+            .iter()
+            .map(|(correct, run_len)| {
+                TextRun {
+                    len: *run_len,
+                    font: text_style.font(),
+                    color: if *correct {
+                        rgba(0xffffffff).into()
+                    } else {
+                        rgba(0xff0000ff).into()
+                    },
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }
+            })
+            .chain([TextRun {
+                len: self.text.len() - self.head,
+                font: text_style.font(),
+                color: text_style.color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }])
+            .collect();
+
+        let mut styled_text = StyledText::new(&self.text).with_runs(runs);
+        (styled_text.request_layout(None, window, cx).0, styled_text)
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        styled_text: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        styled_text.prepaint(None, bounds, &mut (), window, cx);
+
+        let cursor_position = styled_text.layout().position_for_index(self.head).unwrap();
+        let cursor_height = window.text_style().line_height_in_pixels(window.rem_size());
+        let cursor_bounds = Bounds::new(cursor_position, size(px(2.0), cursor_height));
+
+        Some(fill(cursor_bounds, rgba(0xffffffff)))
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        styled_text: &mut Self::RequestLayoutState,
+        cursor: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        styled_text.paint(None, bounds, &mut (), &mut (), window, cx);
+        window.paint_quad(cursor.take().unwrap());
     }
 }
