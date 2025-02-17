@@ -3,9 +3,9 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    anchored, div, fill, px, rgba, size, AnchoredPositionMode, App, Bounds, Edges, ElementId,
-    Entity, EventEmitter, FocusHandle, GlobalElementId, IsZero, KeyDownEvent, LayoutId, PaintQuad,
-    Pixels, Point, Position, Rgba, Style, StyledText, TextRun, Window,
+    anchored, div, fill, point, px, rgba, size, AnchoredPositionMode, App, Bounds, Edges,
+    ElementId, Entity, EventEmitter, FocusHandle, GlobalElementId, IsZero, KeyDownEvent, LayoutId,
+    PaintQuad, Pixels, Point, Position, Rgba, Style, StyledText, TextRun, Window,
 };
 
 pub struct TextView {
@@ -277,12 +277,32 @@ impl Element for TextViewElement {
             let cursor_position = styled_text
                 .layout()
                 .position_for_index(text_view.utf8_head)
-                .unwrap()
-                - bounds.origin;
+                .unwrap();
+            let width = styled_text
+                .layout()
+                .position_for_index(text_view.utf8_head + 1)
+                .map_or(px(0.0), |pos| pos.x)
+                - cursor_position.x;
+            let width = if width < px(1.0) {
+                line_height / 3.0
+            } else {
+                width
+            };
+
             let current_cursor = text_view.cursor.read(cx).element;
             let new_cursor = CursorElement {
                 line_height,
-                target_position: cursor_position,
+                target_position: cursor_position - bounds.origin
+                    + point(
+                        (width - line_height / 3.0) / 2.0,
+                        line_height
+                            - styled_text
+                                .layout()
+                                .line_layout_for_index(text_view.utf8_head)
+                                .unwrap()
+                                .descent()
+                            + px(2.0),
+                    ),
                 text_origin: bounds.origin,
             };
 
@@ -380,7 +400,7 @@ impl Element for CursorElement {
             let position = state.position + self.text_origin;
             let style = Style {
                 position: Position::Absolute,
-                size: size(px(2.0).into(), self.line_height.into()),
+                size: size(px(self.line_height.0 / 3.0).into(), px(2.0).into()),
                 inset: Edges {
                     left: position.x.into(),
                     top: position.y.into(),
