@@ -156,26 +156,15 @@ impl Render for TextView {
                     event.keystroke.key_char.as_deref(),
                 ) {
                     (_, "backspace", _) => {
-                        if !this
+                        let is_whitespace = this
                             .text
                             .chars()
                             .nth(this.char_head.saturating_sub(1))
-                            .is_some_and(|char| char.is_whitespace())
-                        {
-                            this.backspace();
-                        }
+                            .is_some_and(|char| char.is_whitespace());
 
-                        let mut removed_whitespace = false;
-                        while this
-                            .text
-                            .chars()
-                            .nth(this.char_head.saturating_sub(1))
-                            .is_some_and(|char| char.is_whitespace())
-                        {
-                            this.backspace();
-                            removed_whitespace = true;
-                        }
-                        if removed_whitespace {
+                        this.backspace();
+
+                        if is_whitespace {
                             this.over_inserted_stack.pop();
                         }
                     }
