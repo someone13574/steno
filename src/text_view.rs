@@ -270,13 +270,13 @@ impl Element for TextViewElement {
     ) -> Self::PrepaintState {
         styled_text.prepaint(None, bounds, &mut (), window, cx);
 
-        let text_style = window.text_style();
-        let line_height = text_style.line_height_in_pixels(window.rem_size());
         self.entity.update(cx, |text_view, cx| {
+            let line_height = styled_text.layout().line_height();
             let cursor_position = styled_text
                 .layout()
                 .position_for_index(text_view.utf8_head)
                 .unwrap();
+
             let width = styled_text
                 .layout()
                 .position_for_index(text_view.utf8_head + 1)
@@ -299,8 +299,7 @@ impl Element for TextViewElement {
                                 .layout()
                                 .line_layout_for_index(text_view.utf8_head)
                                 .unwrap()
-                                .descent()
-                            + px(2.0),
+                                .descent(),
                     ),
                 text_origin: bounds.origin,
             };

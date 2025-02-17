@@ -37,7 +37,7 @@ impl Render for MainView {
             .size_full()
             .justify_center()
             .items_center()
-            .child(clamp(px(400.0), px(400.0), 2.0, self.text_view.clone()))
+            .child(clamp(px(800.0), px(300.0), 2.0, self.text_view.clone()))
     }
 }
 
