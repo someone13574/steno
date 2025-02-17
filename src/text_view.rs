@@ -1,7 +1,11 @@
+use std::f32::consts::PI;
+use std::time::{Duration, Instant};
+
 use gpui::prelude::*;
 use gpui::{
-    div, fill, px, rgba, size, App, Bounds, ElementId, Entity, FocusHandle, GlobalElementId,
-    KeyDownEvent, LayoutId, PaintQuad, Pixels, StyledText, TextRun, Window,
+    anchored, div, fill, px, rgba, size, AnchoredPositionMode, App, Bounds, Edges, ElementId,
+    Entity, EventEmitter, FocusHandle, GlobalElementId, IsZero, KeyDownEvent, LayoutId, PaintQuad,
+    Pixels, Point, Position, Rgba, Style, StyledText, TextRun, Window,
 };
 
 pub struct TextView {
@@ -11,11 +15,12 @@ pub struct TextView {
     over_inserted_stack: Vec<usize>,
     run_lens: Vec<(bool, usize)>,
     focus_handle: FocusHandle,
+    cursor: Entity<Cursor>,
 }
 
 impl TextView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
-        cx.new(|_cx| {
+        cx.new(|cx| {
             Self {
                 text: "The quick brown fox jumped over the lazy dog".into(),
                 char_head: 0,
@@ -23,6 +28,7 @@ impl TextView {
                 over_inserted_stack: vec![0],
                 run_lens: Vec::new(),
                 focus_handle,
+                cursor: Cursor::new(cx),
             }
         })
     }
@@ -130,10 +136,14 @@ impl Render for TextView {
             .font_family("Sans")
             .text_color(rgba(0xffffff20))
             .child(TextViewElement {
-                text: self.text.clone(),
-                runs: self.run_lens.clone(),
-                head: self.utf8_head,
+                entity: cx.entity(),
             })
+            .child(
+                anchored()
+                    .position_mode(AnchoredPositionMode::Window)
+                    .position(Point::default())
+                    .child(self.cursor.clone()),
+            )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
                 match (
                     this.text.chars().nth(this.char_head),
@@ -198,9 +208,7 @@ impl Render for TextView {
 }
 
 struct TextViewElement {
-    text: String,
-    runs: Vec<(bool, usize)>,
-    head: usize,
+    entity: Entity<TextView>,
 }
 
 impl IntoElement for TextViewElement {
@@ -212,7 +220,7 @@ impl IntoElement for TextViewElement {
 }
 
 impl Element for TextViewElement {
-    type PrepaintState = Option<PaintQuad>;
+    type PrepaintState = ();
     type RequestLayoutState = StyledText;
 
     fn id(&self) -> Option<ElementId> {
@@ -226,9 +234,10 @@ impl Element for TextViewElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let text_style = window.text_style();
+        let text_view = self.entity.read(cx);
 
-        let runs = self
-            .runs
+        let runs = text_view
+            .run_lens
             .iter()
             .map(|(correct, run_len)| {
                 TextRun {
@@ -245,7 +254,7 @@ impl Element for TextViewElement {
                 }
             })
             .chain([TextRun {
-                len: self.text.len() - self.head,
+                len: text_view.text.len() - text_view.utf8_head,
                 font: text_style.font(),
                 color: text_style.color,
                 background_color: None,
@@ -254,7 +263,7 @@ impl Element for TextViewElement {
             }])
             .collect();
 
-        let mut styled_text = StyledText::new(&self.text).with_runs(runs);
+        let mut styled_text = StyledText::new(&text_view.text).with_runs(runs);
         (styled_text.request_layout(None, window, cx).0, styled_text)
     }
 
@@ -268,11 +277,22 @@ impl Element for TextViewElement {
     ) -> Self::PrepaintState {
         styled_text.prepaint(None, bounds, &mut (), window, cx);
 
-        let cursor_position = styled_text.layout().position_for_index(self.head).unwrap();
-        let cursor_height = window.text_style().line_height_in_pixels(window.rem_size());
-        let cursor_bounds = Bounds::new(cursor_position, size(px(2.0), cursor_height));
+        let text_style = window.text_style();
+        let line_height = text_style.line_height_in_pixels(window.rem_size());
+        self.entity.update(cx, |text_view, cx| {
+            let cursor_position = styled_text
+                .layout()
+                .position_for_index(text_view.utf8_head)
+                .unwrap();
+            let cursor = text_view.cursor.read(cx).element;
 
-        Some(fill(cursor_bounds, rgba(0xffffffff)))
+            if cursor.target_position != cursor_position || cursor.line_height != line_height {
+                cx.emit(CursorUpdateEvent {
+                    position: cursor_position,
+                    line_height,
+                });
+            }
+        });
     }
 
     fn paint(
@@ -280,11 +300,157 @@ impl Element for TextViewElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
-        cursor: &mut Self::PrepaintState,
+        _prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
         styled_text.paint(None, bounds, &mut (), &mut (), window, cx);
-        window.paint_quad(cursor.take().unwrap());
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct Cursor {
+    element: CursorElement,
+}
+
+impl Cursor {
+    pub fn new(cx: &mut Context<TextView>) -> Entity<Self> {
+        let text_view = cx.entity();
+
+        cx.new(|cx| {
+            cx.subscribe(&text_view, |cursor: &mut Self, _, event, cx| {
+                cursor.element.target_position = event.position;
+                cursor.element.line_height = event.line_height;
+
+                cx.notify();
+            })
+            .detach();
+
+            Self::default()
+        })
+    }
+}
+
+impl Render for Cursor {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<'_, Self>) -> impl IntoElement {
+        self.element
+    }
+}
+
+struct CursorUpdateEvent {
+    position: Point<Pixels>,
+    line_height: Pixels,
+}
+
+impl EventEmitter<CursorUpdateEvent> for TextView {}
+
+#[derive(Clone, Copy, Default)]
+struct CursorElement {
+    line_height: Pixels,
+    target_position: Point<Pixels>,
+}
+
+struct CursorState {
+    position: Point<Pixels>,
+    last_frame: Instant,
+    idle_time: Instant,
+}
+
+impl IntoElement for CursorElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for CursorElement {
+    type PrepaintState = PaintQuad;
+    type RequestLayoutState = Duration;
+
+    fn id(&self) -> Option<ElementId> {
+        Some("cursor".into())
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        window.with_element_state(id.unwrap(), |state, window| {
+            let mut state = state.unwrap_or(CursorState {
+                position: self.target_position,
+                last_frame: Instant::now(),
+                idle_time: Instant::now(),
+            });
+
+            let style = Style {
+                position: Position::Absolute,
+                size: size(px(2.0).into(), self.line_height.into()),
+                inset: Edges {
+                    left: state.position.x.into(),
+                    top: state.position.y.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let magnitude = (state.position - self.target_position).magnitude();
+            if state.position.is_zero() || magnitude > 100.0 {
+                state.position = self.target_position;
+            } else if (state.position - self.target_position).magnitude() > 0.1 {
+                let mix = (state.last_frame.elapsed().as_secs_f64() * 30.0).clamp(0.0, 1.0) as f32;
+                state.position = state.position * (1.0 - mix) + self.target_position * mix;
+            }
+
+            if magnitude > 0.25 {
+                state.idle_time = Instant::now();
+            }
+
+            state.last_frame = Instant::now();
+            window.request_animation_frame();
+
+            (
+                (
+                    window.request_layout(style, [], cx),
+                    state.idle_time.elapsed(),
+                ),
+                state,
+            )
+        })
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        idle_time: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Self::PrepaintState {
+        let pulse = (idle_time.as_secs_f32() * PI).cos() * 0.5 + 0.5;
+
+        fill(
+            bounds,
+            Rgba {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: pulse,
+            },
+        )
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        _cx: &mut App,
+    ) {
+        window.paint_quad(prepaint.clone());
     }
 }
