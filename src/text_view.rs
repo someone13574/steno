@@ -283,14 +283,17 @@ impl Element for TextViewElement {
             let cursor_position = styled_text
                 .layout()
                 .position_for_index(text_view.utf8_head)
-                .unwrap();
-            let cursor = text_view.cursor.read(cx).element;
+                .unwrap()
+                - bounds.origin;
+            let current_cursor = text_view.cursor.read(cx).element;
+            let new_cursor = CursorElement {
+                line_height,
+                target_position: cursor_position,
+                text_origin: bounds.origin,
+            };
 
-            if cursor.target_position != cursor_position || cursor.line_height != line_height {
-                cx.emit(CursorUpdateEvent {
-                    position: cursor_position,
-                    line_height,
-                });
+            if current_cursor != new_cursor {
+                cx.emit(new_cursor);
             }
         });
     }
@@ -318,9 +321,8 @@ impl Cursor {
         let text_view = cx.entity();
 
         cx.new(|cx| {
-            cx.subscribe(&text_view, |cursor: &mut Self, _, event, cx| {
-                cursor.element.target_position = event.position;
-                cursor.element.line_height = event.line_height;
+            cx.subscribe(&text_view, |cursor: &mut Self, _, new_cursor, cx| {
+                cursor.element = *new_cursor;
 
                 cx.notify();
             })
@@ -337,17 +339,13 @@ impl Render for Cursor {
     }
 }
 
-struct CursorUpdateEvent {
-    position: Point<Pixels>,
-    line_height: Pixels,
-}
+impl EventEmitter<CursorElement> for TextView {}
 
-impl EventEmitter<CursorUpdateEvent> for TextView {}
-
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 struct CursorElement {
     line_height: Pixels,
     target_position: Point<Pixels>,
+    text_origin: Point<Pixels>,
 }
 
 struct CursorState {
@@ -385,12 +383,13 @@ impl Element for CursorElement {
                 idle_time: Instant::now(),
             });
 
+            let position = state.position + self.text_origin;
             let style = Style {
                 position: Position::Absolute,
                 size: size(px(2.0).into(), self.line_height.into()),
                 inset: Edges {
-                    left: state.position.x.into(),
-                    top: state.position.y.into(),
+                    left: position.x.into(),
+                    top: position.y.into(),
                     ..Default::default()
                 },
                 ..Default::default()
