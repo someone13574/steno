@@ -4,7 +4,7 @@ use gpui::prelude::*;
 use gpui::{div, px, App, Application, Entity, FocusHandle, Window};
 use text_view::TextView;
 use theme::{BaseTheme, Theme};
-use window::TapperWindow;
+use window::StenoWindow;
 
 mod assets;
 mod components;
@@ -13,7 +13,7 @@ mod theme;
 mod titlebar;
 mod window;
 
-pub const APP_ID: &str = "com.github.someone13574.tapper";
+pub const APP_ID: &str = "com.github.someone13574.steno";
 
 pub struct MainView {
     text_view: Entity<TextView>,
@@ -45,7 +45,7 @@ fn main() {
         |cx| {
             cx.set_global(Theme::from(BaseTheme::default_dark()));
 
-            TapperWindow::new(cx, |focus_handle, _window, cx| {
+            StenoWindow::new(cx, |focus_handle, _window, cx| {
                 MainView::new(focus_handle, cx)
             })
             .unwrap();

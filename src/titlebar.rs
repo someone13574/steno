@@ -3,15 +3,15 @@ use gpui::{div, App, AppContext, Entity, MouseButton, Render, Window};
 
 use crate::components::button::Button;
 use crate::theme::ActiveTheme;
-use crate::window::TapperWindow;
+use crate::window::StenoWindow;
 
 pub struct Titlebar<V: Render> {
-    window: Entity<TapperWindow<V>>,
+    window: Entity<StenoWindow<V>>,
     buttons: Entity<TitlebarButtons>,
 }
 
 impl<V: Render> Titlebar<V> {
-    pub fn new(window: Entity<TapperWindow<V>>, cx: &mut App) -> Entity<Self> {
+    pub fn new(window: Entity<StenoWindow<V>>, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             Self {
                 window,
@@ -39,7 +39,7 @@ impl<V: Render> Render for Titlebar<V> {
             .font_family(cx.theme().csd_font_family)
             .text_color(cx.theme().csd_foreground)
             .child(gpui::div())
-            .child("Tapper")
+            .child("Steno")
             .child(
                 gpui::div()
                     .w_0()

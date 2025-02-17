@@ -12,7 +12,7 @@ use crate::APP_ID;
 
 pub const CSD_RESIZE_EDGE_SIZE: Pixels = px(16.0);
 
-pub struct TapperWindow<V: Render> {
+pub struct StenoWindow<V: Render> {
     main_view: Entity<V>,
     titlebar: Entity<Titlebar<V>>,
     focus_handle: FocusHandle,
@@ -20,14 +20,14 @@ pub struct TapperWindow<V: Render> {
     pub active_csd_event: bool,
 }
 
-impl<V: Render> TapperWindow<V> {
+impl<V: Render> StenoWindow<V> {
     pub fn new(
         cx: &mut App,
         build_root_view: impl FnOnce(FocusHandle, &mut Window, &mut Context<Self>) -> Entity<V>,
     ) -> Result<WindowHandle<Self>> {
         let window_options = WindowOptions {
             titlebar: Some(TitlebarOptions {
-                title: Some("Tapper".into()),
+                title: Some("Steno".into()),
                 ..Default::default()
             }),
             app_id: Some(APP_ID.to_string()),
@@ -60,7 +60,7 @@ impl<V: Render> TapperWindow<V> {
     }
 }
 
-impl<V: Render> Render for TapperWindow<V> {
+impl<V: Render> Render for StenoWindow<V> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let decorations = window.window_decorations();
         let client_inset = cx.theme().csd_shadow_size.max(CSD_RESIZE_EDGE_SIZE);

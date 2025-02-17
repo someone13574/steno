@@ -4140,6 +4140,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "steno"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "gpui",
+ "rust-embed",
+ "smallvec",
+]
+
+[[package]]
 name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4364,16 +4374,6 @@ name = "take-until"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bdb6fa0dfa67b38c1e66b7041ba9dcf23b99d8121907cd31c807a332f7a0bbb"
-
-[[package]]
-name = "tapper"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "gpui",
- "rust-embed",
- "smallvec",
-]
 
 [[package]]
 name = "target-lexicon"
