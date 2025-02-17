@@ -8,6 +8,7 @@ use window::StenoWindow;
 
 mod assets;
 mod components;
+mod cursor;
 mod text_view;
 mod theme;
 mod titlebar;

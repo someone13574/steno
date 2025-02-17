@@ -1,12 +1,11 @@
-use std::f32::consts::PI;
-use std::time::{Duration, Instant};
-
 use gpui::prelude::*;
 use gpui::{
-    anchored, div, fill, point, px, rgba, size, AnchoredPositionMode, App, Bounds, Edges,
-    ElementId, Entity, EventEmitter, FocusHandle, GlobalElementId, IsZero, KeyDownEvent, LayoutId,
-    PaintQuad, Pixels, Point, Position, Rgba, Style, StyledText, TextRun, Window,
+    anchored, div, point, px, rgba, AnchoredPositionMode, App, Bounds, ElementId, Entity,
+    FocusHandle, GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextRun,
+    Window,
 };
+
+use crate::cursor::Cursor;
 
 pub struct TextView {
     text: String,
@@ -289,8 +288,8 @@ impl Element for TextViewElement {
                 width
             };
 
-            let current_cursor = text_view.cursor.read(cx).element;
-            let new_cursor = CursorElement {
+            let current_cursor = text_view.cursor.read(cx);
+            let new_cursor = Cursor {
                 line_height,
                 target_position: cursor_position - bounds.origin
                     + point(
@@ -306,7 +305,7 @@ impl Element for TextViewElement {
                 text_origin: bounds.origin,
             };
 
-            if current_cursor != new_cursor {
+            if *current_cursor != new_cursor {
                 cx.emit(new_cursor);
             }
         });
@@ -322,148 +321,5 @@ impl Element for TextViewElement {
         cx: &mut App,
     ) {
         styled_text.paint(None, bounds, &mut (), &mut (), window, cx);
-    }
-}
-
-#[derive(Clone, Copy, Default)]
-struct Cursor {
-    element: CursorElement,
-}
-
-impl Cursor {
-    pub fn new(cx: &mut Context<TextView>) -> Entity<Self> {
-        let text_view = cx.entity();
-
-        cx.new(|cx| {
-            cx.subscribe(&text_view, |cursor: &mut Self, _, new_cursor, cx| {
-                cursor.element = *new_cursor;
-
-                cx.notify();
-            })
-            .detach();
-
-            Self::default()
-        })
-    }
-}
-
-impl Render for Cursor {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<'_, Self>) -> impl IntoElement {
-        self.element
-    }
-}
-
-impl EventEmitter<CursorElement> for TextView {}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-struct CursorElement {
-    line_height: Pixels,
-    target_position: Point<Pixels>,
-    text_origin: Point<Pixels>,
-}
-
-struct CursorState {
-    position: Point<Pixels>,
-    last_frame: Instant,
-    idle_time: Instant,
-}
-
-impl IntoElement for CursorElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for CursorElement {
-    type PrepaintState = PaintQuad;
-    type RequestLayoutState = Duration;
-
-    fn id(&self) -> Option<ElementId> {
-        Some("cursor".into())
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        window.with_element_state(id.unwrap(), |state, window| {
-            let mut state = state.unwrap_or(CursorState {
-                position: self.target_position,
-                last_frame: Instant::now(),
-                idle_time: Instant::now(),
-            });
-
-            let position = state.position + self.text_origin;
-            let style = Style {
-                position: Position::Absolute,
-                size: size(px(self.line_height.0 / 3.0).into(), px(2.0).into()),
-                inset: Edges {
-                    left: position.x.into(),
-                    top: position.y.into(),
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
-
-            let magnitude = (state.position - self.target_position).magnitude();
-            if state.position.is_zero() || magnitude > 100.0 {
-                state.position = self.target_position;
-            } else if (state.position - self.target_position).magnitude() > 0.1 {
-                let mix = (state.last_frame.elapsed().as_secs_f64() * 30.0).clamp(0.0, 1.0) as f32;
-                state.position = state.position * (1.0 - mix) + self.target_position * mix;
-            }
-
-            if magnitude > 0.25 {
-                state.idle_time = Instant::now();
-            }
-
-            state.last_frame = Instant::now();
-            window.request_animation_frame();
-
-            (
-                (
-                    window.request_layout(style, [], cx),
-                    state.idle_time.elapsed(),
-                ),
-                state,
-            )
-        })
-    }
-
-    fn prepaint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        bounds: Bounds<Pixels>,
-        idle_time: &mut Self::RequestLayoutState,
-        _window: &mut Window,
-        _cx: &mut App,
-    ) -> Self::PrepaintState {
-        let pulse = (idle_time.as_secs_f32() * PI).cos() * 0.5 + 0.5;
-
-        fill(
-            bounds,
-            Rgba {
-                r: 1.0,
-                g: 1.0,
-                b: 1.0,
-                a: pulse,
-            },
-        )
-    }
-
-    fn paint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _bounds: Bounds<Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        prepaint: &mut Self::PrepaintState,
-        window: &mut Window,
-        _cx: &mut App,
-    ) {
-        window.paint_quad(prepaint.clone());
     }
 }
