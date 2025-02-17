@@ -124,7 +124,7 @@ impl TextView {
 }
 
 impl Render for TextView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
@@ -138,11 +138,16 @@ impl Render for TextView {
             .child(TextViewElement {
                 entity: cx.entity(),
             })
-            .child(
-                anchored()
-                    .position_mode(AnchoredPositionMode::Window)
-                    .position(Point::default())
-                    .child(self.cursor.clone()),
+            .when(
+                self.focus_handle.is_focused(window) && window.is_window_active(),
+                |element| {
+                    element.child(
+                        anchored()
+                            .position_mode(AnchoredPositionMode::Window)
+                            .position(Point::default())
+                            .child(self.cursor.clone()),
+                    )
+                },
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
                 match (
