@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use crate::cursor::Cursor;
+use crate::dictionary::Dictionary;
 
 pub struct TextView {
     text: String,
@@ -21,7 +22,7 @@ impl TextView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             Self {
-                text: "The quick brown fox jumped over the lazy dog".into(),
+                text: Dictionary::random_text(20, cx),
                 char_head: 0,
                 utf8_head: 0,
                 over_inserted_stack: vec![0],

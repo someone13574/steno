@@ -1,5 +1,6 @@
 use assets::Assets;
 use components::clamp::clamp;
+use dictionary::Dictionary;
 use gpui::prelude::*;
 use gpui::{div, px, App, Application, Entity, FocusHandle, Window};
 use text_view::TextView;
@@ -9,6 +10,7 @@ use window::StenoWindow;
 mod assets;
 mod components;
 mod cursor;
+mod dictionary;
 mod text_view;
 mod theme;
 mod titlebar;
@@ -45,6 +47,7 @@ fn main() {
     Application::new().with_assets(Assets).run({
         |cx| {
             cx.set_global(Theme::from(BaseTheme::default_dark()));
+            Dictionary::new("en", 250).set_global(cx);
 
             StenoWindow::new(cx, |focus_handle, _window, cx| {
                 MainView::new(focus_handle, cx)
