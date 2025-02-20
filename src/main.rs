@@ -49,7 +49,10 @@ fn main() {
             cx.set_global(Theme::from(BaseTheme::default_dark()));
             Dictionary::new("en", 250).set_global(cx);
 
-            StenoWindow::new(cx, |focus_handle, _window, cx| {
+            StenoWindow::new(cx, |focus_handle, window, cx| {
+                Theme::default_light().set_light(window, cx);
+                Theme::default_dark().set_dark(window, cx);
+
                 MainView::new(focus_handle, cx)
             })
             .unwrap();

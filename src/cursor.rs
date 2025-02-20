@@ -3,11 +3,12 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    fill, px, size, App, Bounds, Edges, ElementId, Entity, EventEmitter, GlobalElementId, IsZero,
-    LayoutId, PaintQuad, Pixels, Point, Position, Rgba, Style, Window,
+    fill, px, size, App, Bounds, Edges, ElementId, Entity, EventEmitter, GlobalElementId, Hsla,
+    IsZero, LayoutId, PaintQuad, Pixels, Point, Position, Style, Window,
 };
 
 use crate::text_view::TextView;
+use crate::theme::ActiveTheme;
 
 impl EventEmitter<Cursor> for TextView {}
 
@@ -113,18 +114,13 @@ impl Element for Cursor {
         bounds: Bounds<Pixels>,
         idle_time: &mut Self::RequestLayoutState,
         _window: &mut Window,
-        _cx: &mut App,
+        cx: &mut App,
     ) -> Self::PrepaintState {
         let pulse = (idle_time.as_secs_f32() * PI).cos() * 0.5 + 0.5;
 
         fill(
             bounds,
-            Rgba {
-                r: 1.0,
-                g: 1.0,
-                b: 1.0,
-                a: pulse,
-            },
+            Hsla::from(cx.theme().text_view_cursor).opacity(pulse),
         )
     }
 

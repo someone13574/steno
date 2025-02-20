@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{div, App, AppContext, Entity, MouseButton, Render, Window};
 
-use crate::components::button::Button;
+use crate::components::button::{Button, ButtonTheme};
 use crate::theme::ActiveTheme;
 use crate::window::StenoWindow;
 
@@ -67,24 +67,35 @@ struct TitlebarButtons {
 impl TitlebarButtons {
     pub fn new(cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
+            let theme_fn = |cx: &mut App| {
+                ButtonTheme {
+                    background: Some(cx.theme().csd_button_background),
+                    background_hover: Some(cx.theme().csd_button_background_hovered),
+                    icon: Some(cx.theme().csd_button_foreground),
+                }
+            };
+
             Self {
                 minimize: Button::builder()
                     .svg_icon("minimize.svg")
                     .on_mouse_down(|_event, window, _cx| {
                         window.minimize_window();
                     })
+                    .theme(theme_fn)
                     .build(cx),
                 maximize: Button::builder()
                     .svg_icon("maximize.svg")
                     .on_mouse_down(|_event, window, _cx| {
                         window.zoom_window();
                     })
+                    .theme(theme_fn)
                     .build(cx),
                 close: Button::builder()
                     .svg_icon("close.svg")
                     .on_mouse_down(|_event, window, _cx| {
                         window.remove_window();
                     })
+                    .theme(theme_fn)
                     .build(cx),
             }
         })

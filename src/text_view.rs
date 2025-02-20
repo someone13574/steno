@@ -1,12 +1,12 @@
 use gpui::prelude::*;
 use gpui::{
-    anchored, div, point, px, rgba, AnchoredPositionMode, App, Bounds, ElementId, Entity,
-    FocusHandle, GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextRun,
-    Window,
+    anchored, div, point, px, AnchoredPositionMode, App, Bounds, ElementId, Entity, FocusHandle,
+    GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextRun, Window,
 };
 
 use crate::cursor::Cursor;
 use crate::dictionary::Dictionary;
+use crate::theme::ActiveTheme;
 
 pub struct TextView {
     text: String,
@@ -134,7 +134,7 @@ impl Render for TextView {
             .track_focus(&self.focus_handle)
             .text_2xl()
             .font_family("Sans")
-            .text_color(rgba(0xffffff20))
+            .text_color(cx.theme().text_view_placeholder_text)
             .child(TextViewElement {
                 entity: cx.entity(),
             })
@@ -238,9 +238,9 @@ impl Element for TextViewElement {
                     len: *run_len,
                     font: text_style.font(),
                     color: if *correct {
-                        rgba(0xffffffff).into()
+                        cx.theme().text_view_correct_text.into()
                     } else {
-                        rgba(0xff0000ff).into()
+                        cx.theme().text_view_incorrect_text.into()
                     },
                     background_color: None,
                     underline: None,
