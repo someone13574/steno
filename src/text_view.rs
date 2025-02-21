@@ -1,7 +1,8 @@
 use gpui::prelude::*;
 use gpui::{
     anchored, div, point, px, AnchoredPositionMode, App, Bounds, ElementId, Entity, FocusHandle,
-    GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextRun, Window,
+    GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextLayout, TextRun,
+    Window,
 };
 
 use crate::cursor::Cursor;
@@ -273,35 +274,15 @@ impl Element for TextViewElement {
 
         self.entity.update(cx, |text_view, cx| {
             let line_height = styled_text.layout().line_height();
-            let cursor_position = styled_text
-                .layout()
-                .position_for_index(text_view.utf8_head)
-                .unwrap();
-
-            let width = styled_text
-                .layout()
-                .position_for_index(text_view.utf8_head + 1)
-                .map_or(px(0.0), |pos| pos.x)
-                - cursor_position.x;
-            let width = if width < px(1.0) {
-                line_height / 3.0
-            } else {
-                width
-            };
-
             let current_cursor = text_view.cursor.read(cx);
+
             let new_cursor = Cursor {
                 line_height,
-                target_position: cursor_position - bounds.origin
-                    + point(
-                        (width - line_height / 3.0) / 2.0,
-                        line_height
-                            - styled_text
-                                .layout()
-                                .line_layout_for_index(text_view.utf8_head)
-                                .unwrap()
-                                .descent(),
-                    ),
+                target_position: cursor_pos(
+                    text_view.utf8_head,
+                    styled_text.layout(),
+                    line_height / 3.0,
+                ),
                 text_origin: bounds.origin,
             };
 
@@ -322,4 +303,44 @@ impl Element for TextViewElement {
     ) {
         styled_text.paint(None, bounds, &mut (), &mut (), window, cx);
     }
+}
+
+fn cursor_pos(glyph_idx: usize, layout: &TextLayout, cursor_width: Pixels) -> Point<Pixels> {
+    let line_height = layout.line_height();
+    let layout = layout.line_layout_for_index(glyph_idx).unwrap();
+
+    // Get glyph position and width
+    let glyph_width = layout.unwrapped_layout.x_for_index(glyph_idx + 1)
+        - layout.unwrapped_layout.x_for_index(glyph_idx);
+    let run_offsets = layout
+        .runs()
+        .iter()
+        .scan(0, |acc, run| {
+            let offset = *acc;
+            *acc += run.glyphs.len();
+            Some(offset)
+        })
+        .collect::<Vec<_>>();
+
+    let glyph_position = layout.position_for_index(glyph_idx, line_height).unwrap();
+    let glyph_position = if layout
+        .wrap_boundaries()
+        .iter()
+        .map(|wrap_boundary| run_offsets[wrap_boundary.run_ix] + wrap_boundary.glyph_ix)
+        .any(|wrap_idx| wrap_idx == glyph_idx)
+    {
+        // Go to next line
+        point(px(0.0), glyph_position.y + line_height)
+    } else {
+        glyph_position
+    };
+
+    // Calculate cursor x position
+    let cursor_center_x = glyph_position.x + glyph_width / 2.0;
+    let cursor_x = cursor_center_x - cursor_width / 2.0;
+
+    // Calculate cursor y position
+    let cursor_y = glyph_position.y + line_height - layout.descent();
+
+    point(cursor_x, cursor_y)
 }
