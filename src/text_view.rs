@@ -296,7 +296,7 @@ impl Element for TextViewElement {
             let (scroll_offset, last_frame) = state.unwrap_or((Point::default(), Instant::now()));
 
             let magnitude = (scroll_offset - target_scroll).magnitude();
-            let scroll_offset = if magnitude > 0.1 {
+            let scroll_offset = if magnitude > 0.1 && window.is_window_active() {
                 window.request_animation_frame();
 
                 let delta = (last_frame.elapsed().as_secs_f64() * 20.0).clamp(0.0, 1.0) as f32;
