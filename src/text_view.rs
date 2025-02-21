@@ -1,8 +1,8 @@
 use gpui::prelude::*;
 use gpui::{
-    anchored, div, point, px, AnchoredPositionMode, App, Bounds, ElementId, Entity, FocusHandle,
-    GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextLayout, TextRun,
-    Window,
+    anchored, div, fill, point, px, relative, rgba, size, AnchoredPositionMode, App, Bounds,
+    ContentMask, ElementId, Entity, FocusHandle, GlobalElementId, KeyDownEvent, LayoutId, Pixels,
+    Point, Style, StyledText, TextLayout, TextRun, Window,
 };
 
 use crate::cursor::Cursor;
@@ -17,19 +17,21 @@ pub struct TextView {
     run_lens: Vec<(bool, usize)>,
     focus_handle: FocusHandle,
     cursor: Entity<Cursor>,
+    target_scroll: Point<Pixels>,
 }
 
 impl TextView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             Self {
-                text: Dictionary::random_text(20, cx),
+                text: Dictionary::random_text(100, cx),
                 char_head: 0,
                 utf8_head: 0,
                 over_inserted_stack: vec![0],
                 run_lens: Vec::new(),
                 focus_handle,
                 cursor: Cursor::new(cx),
+                target_scroll: Point::default(),
             }
         })
     }
@@ -138,6 +140,7 @@ impl Render for TextView {
             .text_color(cx.theme().text_view_placeholder_text)
             .child(TextViewElement {
                 entity: cx.entity(),
+                line_clamp: 3,
             })
             .when(
                 self.focus_handle.is_focused(window) && window.is_window_active(),
@@ -204,6 +207,7 @@ impl Render for TextView {
 
 struct TextViewElement {
     entity: Entity<TextView>,
+    line_clamp: usize,
 }
 
 impl IntoElement for TextViewElement {
@@ -231,6 +235,16 @@ impl Element for TextViewElement {
         let text_style = window.text_style();
         let text_view = self.entity.read(cx);
 
+        // Create style
+        let style = Style {
+            max_size: size(
+                relative(1.0).into(),
+                (window.line_height() * self.line_clamp).into(),
+            ),
+            ..Default::default()
+        };
+
+        // Create styled text
         let runs = text_view
             .run_lens
             .iter()
@@ -259,7 +273,12 @@ impl Element for TextViewElement {
             .collect();
 
         let mut styled_text = StyledText::new(&text_view.text).with_runs(runs);
-        (styled_text.request_layout(None, window, cx).0, styled_text)
+        let styled_text_layout = styled_text.request_layout(None, window, cx).0;
+
+        (
+            window.request_layout(style, [styled_text_layout], cx),
+            styled_text,
+        )
     }
 
     fn prepaint(
@@ -270,20 +289,24 @@ impl Element for TextViewElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        styled_text.prepaint(None, bounds, &mut (), window, cx);
+        let target_scroll = self.entity.read(cx).target_scroll;
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            styled_text.prepaint(None, bounds + target_scroll, &mut (), window, cx);
+        });
 
         self.entity.update(cx, |text_view, cx| {
             let line_height = styled_text.layout().line_height();
             let current_cursor = text_view.cursor.read(cx);
+            let (glyph_position, cursor_position) =
+                cursor_pos(text_view.utf8_head, styled_text.layout(), line_height / 3.0);
+
+            text_view.target_scroll =
+                point(px(0.0), -(glyph_position.y - line_height).max(px(0.0)));
 
             let new_cursor = Cursor {
                 line_height,
-                target_position: cursor_pos(
-                    text_view.utf8_head,
-                    styled_text.layout(),
-                    line_height / 3.0,
-                ),
-                text_origin: bounds.origin,
+                target_position: cursor_position,
+                text_origin: bounds.origin + target_scroll,
             };
 
             if *current_cursor != new_cursor {
@@ -301,11 +324,25 @@ impl Element for TextViewElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        styled_text.paint(None, bounds, &mut (), &mut (), window, cx);
+        window.paint_quad(fill(bounds, rgba(0xffffff04)));
+        // window.with_content_mask(Some(ContentMask { bounds }), |window| {
+        styled_text.paint(
+            None,
+            bounds + self.entity.read(cx).target_scroll,
+            &mut (),
+            &mut (),
+            window,
+            cx,
+        );
+        // });
     }
 }
 
-fn cursor_pos(glyph_idx: usize, layout: &TextLayout, cursor_width: Pixels) -> Point<Pixels> {
+fn cursor_pos(
+    glyph_idx: usize,
+    layout: &TextLayout,
+    cursor_width: Pixels,
+) -> (Point<Pixels>, Point<Pixels>) {
     let line_height = layout.line_height();
     let layout = layout.line_layout_for_index(glyph_idx).unwrap();
 
@@ -342,5 +379,5 @@ fn cursor_pos(glyph_idx: usize, layout: &TextLayout, cursor_width: Pixels) -> Po
     // Calculate cursor y position
     let cursor_y = glyph_position.y + line_height - layout.descent();
 
-    point(cursor_x, cursor_y)
+    (glyph_position, point(cursor_x, cursor_y))
 }
