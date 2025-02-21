@@ -26,7 +26,7 @@ impl TextView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             Self {
-                text: Dictionary::random_text(100, cx),
+                text: Dictionary::random_text(50, cx),
                 char_head: 0,
                 utf8_head: 0,
                 over_inserted_stack: vec![0],
@@ -314,20 +314,36 @@ impl Element for TextViewElement {
 
         self.entity.update(cx, |text_view, cx| {
             let line_height = styled_text.layout().line_height();
-            let current_cursor = text_view.cursor.read(cx);
+            let current_cursor = *text_view.cursor.read(cx);
             let (glyph_position, cursor_position) =
                 cursor_pos(text_view.utf8_head, styled_text.layout(), line_height / 3.0);
 
+            // Scroll text
             text_view.target_scroll =
                 point(px(0.0), -(glyph_position.y - line_height).max(px(0.0)));
 
+            // Add more text if required
+            let num_full_lines = styled_text
+                .layout()
+                .line_layout_for_index(0)
+                .unwrap()
+                .wrap_boundaries
+                .len();
+            let scrolled_lines = (-text_view.target_scroll.y / line_height + 0.5) as usize;
+            if num_full_lines - scrolled_lines < 5 {
+                text_view
+                    .text
+                    .push_str(format!(" {}", Dictionary::random_text(16, cx)).as_str());
+            }
+
+            // Update cursor
             let new_cursor = Cursor {
                 line_height,
                 target_position: cursor_position,
                 text_origin: bounds.origin + scroll_offset,
             };
 
-            if *current_cursor != new_cursor {
+            if current_cursor != new_cursor {
                 cx.emit(new_cursor);
             }
         });
