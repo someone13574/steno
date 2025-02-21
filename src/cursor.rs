@@ -84,7 +84,7 @@ impl Element for Cursor {
             };
 
             let magnitude = (state.position - self.target_position).magnitude();
-            if state.position.is_zero() || magnitude > 100.0 {
+            if state.position.is_zero() {
                 state.position = self.target_position;
             } else if magnitude > 0.1 {
                 let mix = (state.last_frame.elapsed().as_secs_f64() * 30.0).clamp(0.0, 1.0) as f32;

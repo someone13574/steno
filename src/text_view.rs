@@ -1,8 +1,10 @@
+use std::time::Instant;
+
 use gpui::prelude::*;
 use gpui::{
-    anchored, div, fill, point, px, relative, rgba, size, AnchoredPositionMode, App, Bounds,
-    ContentMask, ElementId, Entity, FocusHandle, GlobalElementId, KeyDownEvent, LayoutId, Pixels,
-    Point, Style, StyledText, TextLayout, TextRun, Window,
+    anchored, div, point, px, relative, size, AnchoredPositionMode, App, Bounds, ContentMask,
+    ElementId, Entity, FocusHandle, GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, Style,
+    StyledText, TextLayout, TextRun, Window,
 };
 
 use crate::cursor::Cursor;
@@ -219,11 +221,11 @@ impl IntoElement for TextViewElement {
 }
 
 impl Element for TextViewElement {
-    type PrepaintState = ();
+    type PrepaintState = Point<Pixels>;
     type RequestLayoutState = StyledText;
 
     fn id(&self) -> Option<ElementId> {
-        None
+        Some("text-view".into())
     }
 
     fn request_layout(
@@ -283,15 +285,31 @@ impl Element for TextViewElement {
 
     fn prepaint(
         &mut self,
-        _id: Option<&GlobalElementId>,
+        id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
         let target_scroll = self.entity.read(cx).target_scroll;
+        let scroll_offset = window.with_element_state(id.unwrap(), |state, window| {
+            let (scroll_offset, last_frame) = state.unwrap_or((Point::default(), Instant::now()));
+
+            let magnitude = (scroll_offset - target_scroll).magnitude();
+            let scroll_offset = if magnitude > 0.1 {
+                window.request_animation_frame();
+
+                let delta = (last_frame.elapsed().as_secs_f64() * 20.0).clamp(0.0, 1.0) as f32;
+                scroll_offset * (1.0 - delta) + target_scroll * delta
+            } else {
+                target_scroll
+            };
+
+            (scroll_offset, (scroll_offset, Instant::now()))
+        });
+
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            styled_text.prepaint(None, bounds + target_scroll, &mut (), window, cx);
+            styled_text.prepaint(None, bounds + scroll_offset, &mut (), window, cx);
         });
 
         self.entity.update(cx, |text_view, cx| {
@@ -306,13 +324,15 @@ impl Element for TextViewElement {
             let new_cursor = Cursor {
                 line_height,
                 target_position: cursor_position,
-                text_origin: bounds.origin + target_scroll,
+                text_origin: bounds.origin + scroll_offset,
             };
 
             if *current_cursor != new_cursor {
                 cx.emit(new_cursor);
             }
         });
+
+        scroll_offset
     }
 
     fn paint(
@@ -320,21 +340,13 @@ impl Element for TextViewElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
-        _prepaint: &mut Self::PrepaintState,
+        scroll_offset: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
-        window.paint_quad(fill(bounds, rgba(0xffffff04)));
-        // window.with_content_mask(Some(ContentMask { bounds }), |window| {
-        styled_text.paint(
-            None,
-            bounds + self.entity.read(cx).target_scroll,
-            &mut (),
-            &mut (),
-            window,
-            cx,
-        );
-        // });
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            styled_text.paint(None, bounds + *scroll_offset, &mut (), &mut (), window, cx);
+        });
     }
 }
 
