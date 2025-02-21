@@ -20,6 +20,7 @@ pub struct TextView {
     focus_handle: FocusHandle,
     cursor: Entity<Cursor>,
     target_scroll: Point<Pixels>,
+    animate_next_scroll: bool,
 }
 
 impl TextView {
@@ -34,6 +35,7 @@ impl TextView {
                 focus_handle,
                 cursor: Cursor::new(cx),
                 target_scroll: Point::default(),
+                animate_next_scroll: true,
             }
         })
     }
@@ -125,6 +127,39 @@ impl TextView {
 
         self.utf8_head -= unwind_len;
         self.char_head -= 1;
+    }
+
+    fn fruncate_chars(&mut self, fruncate_chars: usize) {
+        let fruncate_utf8: usize = self
+            .text
+            .chars()
+            .take(fruncate_chars)
+            .map(char::len_utf8)
+            .sum();
+
+        // Fruncate runs
+        let (run_offset, run_len, run_idx) = self
+            .run_lens
+            .iter()
+            .enumerate()
+            .scan(0, |offset_acc, (run_idx, (_correct, run_len))| {
+                let offset = *offset_acc;
+                *offset_acc += run_len;
+                Some((offset, *run_len, run_idx))
+            })
+            .find(|(offset, run_len, _)| (*offset..offset + run_len).contains(&fruncate_utf8))
+            .unwrap();
+        self.run_lens.drain(0..run_idx);
+        self.run_lens[0].1 = run_offset + run_len - fruncate_utf8;
+
+        // Remove text
+        self.text.drain(0..fruncate_utf8);
+
+        // Move head
+        self.char_head -= fruncate_chars;
+        self.utf8_head -= fruncate_utf8;
+        self.target_scroll = Point::default();
+        self.animate_next_scroll = false;
     }
 }
 
@@ -292,21 +327,29 @@ impl Element for TextViewElement {
         cx: &mut App,
     ) -> Self::PrepaintState {
         let target_scroll = self.entity.read(cx).target_scroll;
-        let scroll_offset = window.with_element_state(id.unwrap(), |state, window| {
-            let (scroll_offset, last_frame) = state.unwrap_or((Point::default(), Instant::now()));
+        let animate_next_scroll = self.entity.read(cx).animate_next_scroll;
+        let (scroll_offset, scroll_complete) =
+            window.with_element_state(id.unwrap(), |state, window| {
+                let (scroll_offset, last_frame) =
+                    state.unwrap_or((Point::default(), Instant::now()));
 
-            let magnitude = (scroll_offset - target_scroll).magnitude();
-            let scroll_offset = if magnitude > 0.1 && window.is_window_active() {
-                window.request_animation_frame();
+                let magnitude = (scroll_offset - target_scroll).magnitude();
+                let (scroll_offset, scroll_complete) =
+                    if magnitude > 0.5 && window.is_window_active() && animate_next_scroll {
+                        window.request_animation_frame();
 
-                let delta = (last_frame.elapsed().as_secs_f64() * 20.0).clamp(0.0, 1.0) as f32;
-                scroll_offset * (1.0 - delta) + target_scroll * delta
-            } else {
-                target_scroll
-            };
+                        let delta =
+                            (last_frame.elapsed().as_secs_f64() * 20.0).clamp(0.0, 1.0) as f32;
+                        (scroll_offset * (1.0 - delta) + target_scroll * delta, false)
+                    } else {
+                        (target_scroll, true)
+                    };
 
-            (scroll_offset, (scroll_offset, Instant::now()))
-        });
+                (
+                    (scroll_offset, scroll_complete),
+                    (scroll_offset, Instant::now()),
+                )
+            });
 
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             styled_text.prepaint(None, bounds + scroll_offset, &mut (), window, cx);
@@ -315,10 +358,11 @@ impl Element for TextViewElement {
         self.entity.update(cx, |text_view, cx| {
             let line_height = styled_text.layout().line_height();
             let current_cursor = *text_view.cursor.read(cx);
-            let (glyph_position, cursor_position) =
-                cursor_pos(text_view.utf8_head, styled_text.layout(), line_height / 3.0);
+            let (glyph_position, cursor_position, run_offsets) =
+                cursor_pos(text_view.char_head, styled_text.layout(), line_height / 3.0);
 
             // Scroll text
+            let old_scrolled_lines = (-text_view.target_scroll.y / line_height + 0.5) as usize;
             text_view.target_scroll =
                 point(px(0.0), -(glyph_position.y - line_height).max(px(0.0)));
 
@@ -330,7 +374,7 @@ impl Element for TextViewElement {
                 .wrap_boundaries
                 .len();
             let scrolled_lines = (-text_view.target_scroll.y / line_height + 0.5) as usize;
-            if num_full_lines - scrolled_lines < 5 {
+            if num_full_lines - scrolled_lines < self.line_clamp + 2 {
                 text_view
                     .text
                     .push_str(format!(" {}", Dictionary::random_text(16, cx)).as_str());
@@ -341,10 +385,24 @@ impl Element for TextViewElement {
                 line_height,
                 target_position: cursor_position,
                 text_origin: bounds.origin + scroll_offset,
+                animate: text_view.animate_next_scroll,
             };
 
             if current_cursor != new_cursor {
                 cx.emit(new_cursor);
+            }
+
+            // Remove old text
+            if old_scrolled_lines != 0 && scroll_complete {
+                let wrap_boundary = styled_text
+                    .layout()
+                    .line_layout_for_index(0)
+                    .unwrap()
+                    .wrap_boundaries[old_scrolled_lines - 1];
+                text_view
+                    .fruncate_chars(run_offsets[wrap_boundary.run_ix] + wrap_boundary.glyph_ix);
+            } else {
+                text_view.animate_next_scroll = true;
             }
         });
 
@@ -370,7 +428,7 @@ fn cursor_pos(
     glyph_idx: usize,
     layout: &TextLayout,
     cursor_width: Pixels,
-) -> (Point<Pixels>, Point<Pixels>) {
+) -> (Point<Pixels>, Point<Pixels>, Vec<usize>) {
     let line_height = layout.line_height();
     let layout = layout.line_layout_for_index(glyph_idx).unwrap();
 
@@ -407,5 +465,5 @@ fn cursor_pos(
     // Calculate cursor y position
     let cursor_y = glyph_position.y + line_height - layout.descent();
 
-    (glyph_position, point(cursor_x, cursor_y))
+    (glyph_position, point(cursor_x, cursor_y), run_offsets)
 }

@@ -17,6 +17,7 @@ pub struct Cursor {
     pub line_height: Pixels,
     pub target_position: Point<Pixels>,
     pub text_origin: Point<Pixels>,
+    pub animate: bool,
 }
 
 impl Cursor {
@@ -71,6 +72,21 @@ impl Element for Cursor {
                 idle_time: Instant::now(),
             });
 
+            let magnitude = (state.position - self.target_position).magnitude();
+            if state.position.is_zero() || !self.animate {
+                state.position = self.target_position;
+            } else if magnitude > 0.5 {
+                let mix = (state.last_frame.elapsed().as_secs_f64() * 30.0).clamp(0.0, 1.0) as f32;
+                state.position = state.position * (1.0 - mix) + self.target_position * mix;
+            }
+
+            if magnitude > 1.0 {
+                state.idle_time = Instant::now();
+            }
+
+            state.last_frame = Instant::now();
+            window.request_animation_frame();
+
             let position = state.position + self.text_origin;
             let style = Style {
                 position: Position::Absolute,
@@ -82,21 +98,6 @@ impl Element for Cursor {
                 },
                 ..Default::default()
             };
-
-            let magnitude = (state.position - self.target_position).magnitude();
-            if state.position.is_zero() {
-                state.position = self.target_position;
-            } else if magnitude > 0.1 {
-                let mix = (state.last_frame.elapsed().as_secs_f64() * 30.0).clamp(0.0, 1.0) as f32;
-                state.position = state.position * (1.0 - mix) + self.target_position * mix;
-            }
-
-            if magnitude > 0.25 {
-                state.idle_time = Instant::now();
-            }
-
-            state.last_frame = Instant::now();
-            window.request_animation_frame();
 
             (
                 (
