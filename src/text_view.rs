@@ -1,12 +1,11 @@
-use std::time::Instant;
-
 use gpui::prelude::*;
 use gpui::{
-    anchored, div, point, px, relative, size, AnchoredPositionMode, App, Bounds, ContentMask,
-    ElementId, Entity, FocusHandle, GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, Style,
-    StyledText, TextLayout, TextRun, Window,
+    anchored, div, point, px, AnchoredPositionMode, App, Bounds, ElementId, Entity, FocusHandle,
+    GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextLayout, TextRun,
+    Window,
 };
 
+use crate::components::continuous_animation::ContinuousAnimationExt;
 use crate::cursor::Cursor;
 use crate::dictionary::Dictionary;
 use crate::theme::ActiveTheme;
@@ -19,8 +18,8 @@ pub struct TextView {
     run_lens: Vec<(bool, usize)>,
     focus_handle: FocusHandle,
     cursor: Entity<Cursor>,
-    target_scroll: Point<Pixels>,
-    animate_next_scroll: bool,
+    target_scroll: Pixels,
+    animate_scroll: bool,
 }
 
 impl TextView {
@@ -34,8 +33,8 @@ impl TextView {
                 run_lens: Vec::new(),
                 focus_handle,
                 cursor: Cursor::new(cx),
-                target_scroll: Point::default(),
-                animate_next_scroll: true,
+                target_scroll: px(0.0),
+                animate_scroll: true,
             }
         })
     }
@@ -158,13 +157,18 @@ impl TextView {
         // Move head
         self.char_head -= fruncate_chars;
         self.utf8_head -= fruncate_utf8;
-        self.target_scroll = Point::default();
-        self.animate_next_scroll = false;
+        self.target_scroll = px(0.0);
+        self.animate_scroll = false;
     }
 }
 
 impl Render for TextView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let target_scroll = self.target_scroll;
+        let animate_scroll = self.animate_scroll;
+        let window_active = window.is_window_active();
+        let entity = cx.entity().downgrade();
+
         div()
             .flex()
             .flex_col()
@@ -175,10 +179,34 @@ impl Render for TextView {
             .text_2xl()
             .font_family("Sans")
             .text_color(cx.theme().text_view_placeholder_text)
-            .child(TextViewElement {
-                entity: cx.entity(),
-                line_clamp: 3,
-            })
+            .child(div().with_continuous_animation(
+                "text-entry-animation",
+                px(0.0),
+                move |element, current_scroll, delta, window, _cx| {
+                    let magnitude = (*current_scroll - target_scroll).abs().0;
+                    let animating = if magnitude > 0.5 && window_active && animate_scroll {
+                        let mix = (delta * 20.0).clamp(0.0, 1.0);
+                        *current_scroll = *current_scroll * (1.0 - mix) + target_scroll * mix;
+                        true
+                    } else {
+                        *current_scroll = target_scroll;
+                        false
+                    };
+
+                    (
+                        element
+                            .w_full()
+                            .h(window.line_height() * 3)
+                            .overflow_hidden()
+                            .child(TextViewElement {
+                                entity: entity.upgrade().unwrap(),
+                                scroll: *current_scroll,
+                                scrolling: animating,
+                            }),
+                        animating,
+                    )
+                },
+            ))
             .when(
                 self.focus_handle.is_focused(window) && window.is_window_active(),
                 |element| {
@@ -244,7 +272,8 @@ impl Render for TextView {
 
 struct TextViewElement {
     entity: Entity<TextView>,
-    line_clamp: usize,
+    scroll: Pixels,
+    scrolling: bool,
 }
 
 impl IntoElement for TextViewElement {
@@ -256,11 +285,11 @@ impl IntoElement for TextViewElement {
 }
 
 impl Element for TextViewElement {
-    type PrepaintState = Point<Pixels>;
+    type PrepaintState = ();
     type RequestLayoutState = StyledText;
 
     fn id(&self) -> Option<ElementId> {
-        Some("text-view".into())
+        None
     }
 
     fn request_layout(
@@ -271,15 +300,6 @@ impl Element for TextViewElement {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let text_style = window.text_style();
         let text_view = self.entity.read(cx);
-
-        // Create style
-        let style = Style {
-            max_size: size(
-                relative(1.0).into(),
-                (window.line_height() * self.line_clamp).into(),
-            ),
-            ..Default::default()
-        };
 
         // Create styled text
         let runs = text_view
@@ -310,82 +330,38 @@ impl Element for TextViewElement {
             .collect();
 
         let mut styled_text = StyledText::new(&text_view.text).with_runs(runs);
-        let styled_text_layout = styled_text.request_layout(None, window, cx).0;
-
-        (
-            window.request_layout(style, [styled_text_layout], cx),
-            styled_text,
-        )
+        (styled_text.request_layout(None, window, cx).0, styled_text)
     }
 
     fn prepaint(
         &mut self,
-        id: Option<&GlobalElementId>,
+        _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let target_scroll = self.entity.read(cx).target_scroll;
-        let animate_next_scroll = self.entity.read(cx).animate_next_scroll;
-        let (scroll_offset, scroll_complete) =
-            window.with_element_state(id.unwrap(), |state, window| {
-                let (scroll_offset, last_frame) =
-                    state.unwrap_or((Point::default(), Instant::now()));
-
-                let magnitude = (scroll_offset - target_scroll).magnitude();
-                let (scroll_offset, scroll_complete) =
-                    if magnitude > 0.5 && window.is_window_active() && animate_next_scroll {
-                        window.request_animation_frame();
-
-                        let delta =
-                            (last_frame.elapsed().as_secs_f64() * 20.0).clamp(0.0, 1.0) as f32;
-                        (scroll_offset * (1.0 - delta) + target_scroll * delta, false)
-                    } else {
-                        (target_scroll, true)
-                    };
-
-                (
-                    (scroll_offset, scroll_complete),
-                    (scroll_offset, Instant::now()),
-                )
-            });
-
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            styled_text.prepaint(None, bounds + scroll_offset, &mut (), window, cx);
-        });
+        let scrolled_bounds = bounds - point(px(0.0), self.scroll);
+        styled_text.prepaint(None, scrolled_bounds, &mut (), window, cx);
 
         self.entity.update(cx, |text_view, cx| {
-            let line_height = styled_text.layout().line_height();
-            let current_cursor = *text_view.cursor.read(cx);
-            let (glyph_position, cursor_position, run_offsets) =
-                cursor_pos(text_view.char_head, styled_text.layout(), line_height / 3.0);
+            let (glyph_position, cursor_position, run_offsets) = cursor_pos(
+                text_view.char_head,
+                styled_text.layout(),
+                window.line_height() / 3.0,
+            );
 
-            // Scroll text
-            let old_scrolled_lines = (-text_view.target_scroll.y / line_height + 0.5) as usize;
-            text_view.target_scroll =
-                point(px(0.0), -(glyph_position.y - line_height).max(px(0.0)));
-
-            // Add more text if required
-            let num_full_lines = styled_text
-                .layout()
-                .line_layout_for_index(0)
-                .unwrap()
-                .wrap_boundaries
-                .len();
-            let scrolled_lines = (-text_view.target_scroll.y / line_height + 0.5) as usize;
-            if num_full_lines - scrolled_lines < self.line_clamp + 2 {
-                text_view
-                    .text
-                    .push_str(format!(" {}", Dictionary::random_text(16, cx)).as_str());
-            }
+            // Set scroll target
+            let scrolled_lines = scrolled_lines(text_view.target_scroll, window.line_height());
+            text_view.target_scroll = (glyph_position.y - window.line_height()).max(px(0.0));
 
             // Update cursor
+            let current_cursor = *text_view.cursor.read(cx);
             let new_cursor = Cursor {
-                line_height,
+                line_height: window.line_height(),
                 target_position: cursor_position,
-                text_origin: bounds.origin + scroll_offset,
-                animate: text_view.animate_next_scroll,
+                text_origin: scrolled_bounds.origin,
+                animate_movement: text_view.animate_scroll,
             };
 
             if current_cursor != new_cursor {
@@ -393,20 +369,31 @@ impl Element for TextViewElement {
             }
 
             // Remove old text
-            if old_scrolled_lines != 0 && scroll_complete {
+            if scrolled_lines != 0 && !self.scrolling {
                 let wrap_boundary = styled_text
                     .layout()
                     .line_layout_for_index(0)
                     .unwrap()
-                    .wrap_boundaries[old_scrolled_lines - 1];
+                    .wrap_boundaries[scrolled_lines - 1];
                 text_view
                     .fruncate_chars(run_offsets[wrap_boundary.run_ix] + wrap_boundary.glyph_ix);
             } else {
-                text_view.animate_next_scroll = true;
+                text_view.animate_scroll = true;
+            }
+
+            // Add new text
+            let num_full_lines = styled_text
+                .layout()
+                .line_layout_for_index(0)
+                .unwrap()
+                .wrap_boundaries
+                .len();
+            if num_full_lines - scrolled_lines < 5 {
+                text_view
+                    .text
+                    .push_str(format!(" {}", Dictionary::random_text(16, cx)).as_str());
             }
         });
-
-        scroll_offset
     }
 
     fn paint(
@@ -414,13 +401,18 @@ impl Element for TextViewElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
-        scroll_offset: &mut Self::PrepaintState,
+        _prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            styled_text.paint(None, bounds + *scroll_offset, &mut (), &mut (), window, cx);
-        });
+        styled_text.paint(
+            None,
+            bounds - point(px(0.0), self.scroll),
+            &mut (),
+            &mut (),
+            window,
+            cx,
+        );
     }
 }
 
@@ -466,4 +458,8 @@ fn cursor_pos(
     let cursor_y = glyph_position.y + line_height - layout.descent();
 
     (glyph_position, point(cursor_x, cursor_y), run_offsets)
+}
+
+fn scrolled_lines(y_pos: Pixels, line_height: Pixels) -> usize {
+    (y_pos / line_height + 0.5) as usize
 }
