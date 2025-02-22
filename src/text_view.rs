@@ -128,13 +128,8 @@ impl TextView {
         self.char_head -= 1;
     }
 
-    fn fruncate_chars(&mut self, fruncate_chars: usize) {
-        let fruncate_utf8: usize = self
-            .text
-            .chars()
-            .take(fruncate_chars)
-            .map(char::len_utf8)
-            .sum();
+    fn fruncate_text(&mut self, utf8_len: usize) {
+        let char_len = self.text[..utf8_len].chars().count();
 
         // Fruncate runs
         let (run_offset, run_len, run_idx) = self
@@ -146,17 +141,17 @@ impl TextView {
                 *offset_acc += run_len;
                 Some((offset, *run_len, run_idx))
             })
-            .find(|(offset, run_len, _)| (*offset..offset + run_len).contains(&fruncate_utf8))
+            .find(|(offset, run_len, _)| (*offset..offset + run_len).contains(&utf8_len))
             .unwrap();
         self.run_lens.drain(0..run_idx);
-        self.run_lens[0].1 = run_offset + run_len - fruncate_utf8;
+        self.run_lens[0].1 = run_offset + run_len - utf8_len;
 
         // Remove text
-        self.text.drain(0..fruncate_utf8);
+        self.text.drain(0..utf8_len);
 
         // Move head
-        self.char_head -= fruncate_chars;
-        self.utf8_head -= fruncate_utf8;
+        self.char_head -= char_len;
+        self.utf8_head -= utf8_len;
         self.target_scroll = px(0.0);
         self.animate_scroll = false;
     }
@@ -345,8 +340,14 @@ impl Element for TextViewElement {
         styled_text.prepaint(None, scrolled_bounds, &mut (), window, cx);
 
         self.entity.update(cx, |text_view, cx| {
-            let (glyph_position, cursor_position, run_offsets) = cursor_pos(
-                text_view.char_head,
+            let utf8_len = text_view
+                .text
+                .chars()
+                .nth(text_view.char_head)
+                .map_or(1, char::len_utf8);
+            let (glyph_position, cursor_position) = cursor_pos(
+                text_view.utf8_head,
+                utf8_len,
                 styled_text.layout(),
                 window.line_height() / 3.0,
             );
@@ -370,13 +371,11 @@ impl Element for TextViewElement {
 
             // Remove old text
             if scrolled_lines != 0 && !self.scrolling {
-                let wrap_boundary = styled_text
-                    .layout()
-                    .line_layout_for_index(0)
-                    .unwrap()
-                    .wrap_boundaries[scrolled_lines - 1];
-                text_view
-                    .fruncate_chars(run_offsets[wrap_boundary.run_ix] + wrap_boundary.glyph_ix);
+                let layout = styled_text.layout().line_layout_for_index(0).unwrap();
+                let wrap_boundary = layout.wrap_boundaries[scrolled_lines - 1];
+                text_view.fruncate_text(
+                    layout.runs()[wrap_boundary.run_ix].glyphs[wrap_boundary.glyph_ix].index,
+                );
             } else {
                 text_view.animate_scroll = true;
             }
@@ -417,32 +416,26 @@ impl Element for TextViewElement {
 }
 
 fn cursor_pos(
-    glyph_idx: usize,
+    utf8_idx: usize,
+    utf8_len: usize,
     layout: &TextLayout,
     cursor_width: Pixels,
-) -> (Point<Pixels>, Point<Pixels>, Vec<usize>) {
+) -> (Point<Pixels>, Point<Pixels>) {
     let line_height = layout.line_height();
-    let layout = layout.line_layout_for_index(glyph_idx).unwrap();
+    let layout = layout.line_layout_for_index(utf8_idx).unwrap();
 
     // Get glyph position and width
-    let glyph_width = layout.unwrapped_layout.x_for_index(glyph_idx + 1)
-        - layout.unwrapped_layout.x_for_index(glyph_idx);
-    let run_offsets = layout
-        .runs()
-        .iter()
-        .scan(0, |acc, run| {
-            let offset = *acc;
-            *acc += run.glyphs.len();
-            Some(offset)
-        })
-        .collect::<Vec<_>>();
+    let glyph_width = layout.unwrapped_layout.x_for_index(utf8_idx + utf8_len)
+        - layout.unwrapped_layout.x_for_index(utf8_idx);
 
-    let glyph_position = layout.position_for_index(glyph_idx, line_height).unwrap();
+    let glyph_position = layout.position_for_index(utf8_idx, line_height).unwrap();
     let glyph_position = if layout
         .wrap_boundaries()
         .iter()
-        .map(|wrap_boundary| run_offsets[wrap_boundary.run_ix] + wrap_boundary.glyph_ix)
-        .any(|wrap_idx| wrap_idx == glyph_idx)
+        .map(|wrap_boundary| {
+            layout.runs()[wrap_boundary.run_ix].glyphs[wrap_boundary.glyph_ix].index
+        })
+        .any(|wrap_idx| wrap_idx == utf8_idx)
     {
         // Go to next line
         point(px(0.0), glyph_position.y + line_height)
@@ -457,7 +450,7 @@ fn cursor_pos(
     // Calculate cursor y position
     let cursor_y = glyph_position.y + line_height - layout.descent();
 
-    (glyph_position, point(cursor_x, cursor_y), run_offsets)
+    (glyph_position, point(cursor_x, cursor_y))
 }
 
 fn scrolled_lines(y_pos: Pixels, line_height: Pixels) -> usize {

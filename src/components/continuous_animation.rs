@@ -3,6 +3,8 @@ use std::time::Instant;
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Bounds, ElementId, GlobalElementId, LayoutId, Pixels, Window};
 
+type ContinuousAnimationFn<E, S> = Box<dyn Fn(E, &mut S, f32, &mut Window, &mut App) -> (E, bool)>;
+
 pub trait ContinuousAnimationExt {
     fn with_continuous_animation<S>(
         self,
@@ -28,7 +30,7 @@ pub struct ContinuousAnimation<E, S> {
     id: ElementId,
     element: Option<E>,
     initial_state: S,
-    animator: Box<dyn Fn(E, &mut S, f32, &mut Window, &mut App) -> (E, bool)>,
+    animator: ContinuousAnimationFn<E, S>,
 }
 
 impl<E: IntoElement + 'static, S: Clone + 'static> IntoElement for ContinuousAnimation<E, S> {
