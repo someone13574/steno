@@ -26,6 +26,7 @@ impl<V: Render> Render for Titlebar<V> {
         let parent = self.window.clone();
 
         div()
+            .id("titlebar")
             .flex()
             .w_full()
             .items_center()
@@ -47,13 +48,20 @@ impl<V: Render> Render for Titlebar<V> {
                     .justify_end()
                     .child(self.buttons.clone()),
             )
-            .on_mouse_down(MouseButton::Left, move |_event, window, cx| {
-                parent.update(cx, |window, cx| {
-                    window.active_csd_event = true;
-                    cx.notify();
-                });
+            .on_mouse_move(move |event, window, cx| {
+                if event.dragging() {
+                    parent.update(cx, |window, cx| {
+                        window.active_csd_event = true;
+                        cx.notify();
+                    });
 
-                window.start_window_move();
+                    window.start_window_move();
+                }
+            })
+            .on_click(|event, window, _cx| {
+                if event.down.click_count >= 2 && event.down.button == MouseButton::Left {
+                    window.zoom_window();
+                }
             })
     }
 }
