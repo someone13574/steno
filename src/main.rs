@@ -50,7 +50,7 @@ fn main() {
     Application::new().with_assets(Assets).run({
         |cx| {
             cx.set_global(Theme::from(BaseTheme::default_dark()));
-            Dictionary::new("en", 250).set_global(cx);
+            Dictionary::new("en", 250, true).set_global(cx);
 
             StenoWindow::new(cx, |focus_handle, window, cx| {
                 Theme::default_light().set_light(window, cx);

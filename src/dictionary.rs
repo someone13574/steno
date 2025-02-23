@@ -16,13 +16,14 @@ pub struct Dictionary {
 impl Global for Dictionary {}
 
 impl Dictionary {
-    pub fn new(id: &str, truncate: usize) -> Self {
+    pub fn new(id: &str, truncate: usize, filter_plural: bool) -> Self {
         let data = Dictionaries::get(format!("{id}.txt").as_str()).unwrap();
         let words = data
             .data
             .lines()
-            .take(truncate)
             .map(|line| line.unwrap().to_string())
+            .filter(|word| !(filter_plural && word.chars().last().unwrap_or('s') == 's'))
+            .take(truncate)
             .collect::<Vec<_>>();
         Self { words }
     }
