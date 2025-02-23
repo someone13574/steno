@@ -147,6 +147,15 @@ impl TextView {
         self.run_lens.drain(0..run_idx);
         self.run_lens[0].1 = run_offset + run_len - utf8_len;
 
+        // Remove stack entries
+        let words_completed = self
+            .text
+            .chars()
+            .take(char_len)
+            .filter(|char| char.is_whitespace())
+            .count();
+        self.over_inserted_stack.drain(0..words_completed);
+
         // Remove text
         self.text.drain(0..utf8_len);
 
@@ -226,15 +235,15 @@ impl Render for TextView {
 
                         this.backspace();
 
-                        if is_whitespace {
+                        if is_whitespace && this.char_head != 0 {
                             this.over_inserted_stack.pop();
                         }
                     }
                     (_, _, Some(whitespace))
                         if whitespace.chars().all(|char| char.is_whitespace()) =>
                     {
-                        if this.char_head != 0
-                            && this
+                        if this.char_head == 0
+                            || this
                                 .text
                                 .chars()
                                 .nth(this.char_head - 1)
