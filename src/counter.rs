@@ -6,6 +6,7 @@ use smol::stream::StreamExt;
 use smol::Timer;
 
 use crate::text_view::TextView;
+use crate::theme::ActiveTheme;
 
 pub struct Counter {
     start_time: Option<Instant>,
@@ -59,19 +60,26 @@ impl Counter {
 }
 
 impl Render for Counter {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let elapsed = self
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let remaining = self
             .start_time
-            .map_or(0, |start_time| start_time.elapsed().as_secs());
+            .map(|start_time| self.duration.saturating_sub(start_time.elapsed().as_secs()));
 
         div()
             .flex()
             .size_full()
             .justify_center()
-            .text_color(gpui::white())
+            .text_color(cx.theme().counter_text)
+            .when(remaining.is_none(), |element| {
+                element.text_color(cx.theme().counter_idle_text)
+            })
             .text_lg()
-            .font_family("Sans")
-            .child(format!("{}", self.duration.saturating_sub(elapsed)))
+            .font_family(cx.theme().counter_font_family)
+            .child(if let Some(remaining) = remaining {
+                format!("{remaining}")
+            } else {
+                cx.theme().counter_idle_message.to_string()
+            })
     }
 }
 

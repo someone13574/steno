@@ -51,6 +51,10 @@ impl BaseTheme {
 #[derive(Clone, Copy)]
 pub struct Theme {
     pub base: BaseTheme,
+    pub counter_idle_message: &'static str,
+    pub counter_idle_text: Rgba,
+    pub counter_font_family: &'static str,
+    pub counter_text: Rgba,
     pub csd_button_background: Rgba,
     pub csd_button_background_hovered: Rgba,
     pub csd_button_foreground: Rgba,
@@ -133,6 +137,10 @@ impl From<BaseTheme> for Theme {
     fn from(base: BaseTheme) -> Self {
         Self {
             base,
+            counter_idle_message: "Type to start...",
+            counter_idle_text: base.dim_foreground,
+            counter_font_family: base.font_family,
+            counter_text: base.foreground,
             csd_button_background: base.background,
             csd_button_background_hovered: base.hover_background,
             csd_button_foreground: base.foreground,
