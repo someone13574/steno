@@ -1,27 +1,48 @@
 use gpui::prelude::*;
 use gpui::{
-    point, relative, size, AnyElement, App, AvailableSpace, Bounds, ElementId, GlobalElementId,
-    LayoutId, Length, Pixels, Style, Window,
+    point, px, relative, size, AnyElement, App, AvailableSpace, Axis, Bounds, ElementId,
+    GlobalElementId, LayoutId, Length, Percentage, Pixels, Style, Window,
 };
 
 pub struct Clamp {
     child: AnyElement,
-    max_width: Pixels,
+    max_size: Pixels,
     linear_at: Pixels,
     smoothing: f32,
+    axis: Axis,
+    position: Percentage,
 }
 
-pub fn clamp(
-    max_width: Pixels,
-    linear_at: Pixels,
-    smoothing: f32,
-    child: impl IntoElement,
-) -> Clamp {
+impl Clamp {
+    pub fn horizontal(mut self) -> Self {
+        self.axis = Axis::Horizontal;
+        self
+    }
+
+    pub fn vertical(mut self) -> Self {
+        self.axis = Axis::Vertical;
+        self
+    }
+
+    pub fn smoothing(mut self, smoothing: f32) -> Self {
+        self.smoothing = smoothing;
+        self
+    }
+
+    pub fn position(mut self, percentage: Percentage) -> Self {
+        self.position = percentage;
+        self
+    }
+}
+
+pub fn clamp(max_size: Pixels, linear_at: Pixels, child: impl IntoElement) -> Clamp {
     Clamp {
         child: child.into_element().into_any(),
-        max_width,
+        max_size,
         linear_at,
-        smoothing,
+        smoothing: 2.0,
+        axis: Axis::Horizontal,
+        position: Percentage(0.5),
     }
 }
 
@@ -66,16 +87,20 @@ impl Element for Clamp {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let size = size(
-            smooth_max(
-                self.max_width,
-                self.linear_at,
-                self.smoothing,
-                bounds.size.width,
-            ),
-            bounds.size.height,
+        let clamped_size = smooth_max(
+            self.max_size,
+            self.linear_at,
+            self.smoothing,
+            match self.axis {
+                Axis::Vertical => bounds.size.height,
+                Axis::Horizontal => bounds.size.width,
+            },
         );
-        let offset = (bounds.size - size) / 2.0;
+        let size = match self.axis {
+            Axis::Vertical => size(bounds.size.width, clamped_size),
+            Axis::Horizontal => size(clamped_size, bounds.size.height),
+        };
+        let offset = (bounds.size - size) * px(self.position.0);
 
         self.child.prepaint_as_root(
             bounds.origin + point(offset.width, offset.height),
@@ -99,7 +124,7 @@ impl Element for Clamp {
 }
 
 fn smooth_max(max: Pixels, linear_at: Pixels, k: f32, available: Pixels) -> Pixels {
-    if available < linear_at {
+    if available <= linear_at {
         return available;
     } else if available > max * k + max {
         return max;

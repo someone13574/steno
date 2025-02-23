@@ -35,7 +35,7 @@ impl BaseTheme {
     pub fn default_dark() -> Self {
         Self {
             background: rgb(0x202020),
-            border: rgb(0x404040),
+            border: rgb(0x303030),
             dim_foreground: rgba(0xffffff20),
             foreground: rgb(0xe0e0e0),
             hover_background: rgb(0x303030),

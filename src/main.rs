@@ -1,14 +1,16 @@
 use assets::Assets;
 use components::clamp::clamp;
+use content_view::ContentView;
 use dictionary::Dictionary;
 use gpui::prelude::*;
 use gpui::{div, px, App, Application, Entity, FocusHandle, Window};
-use text_view::TextView;
-use theme::{BaseTheme, Theme};
+use theme::{ActiveTheme, BaseTheme, Theme};
 use window::StenoWindow;
 
 mod assets;
-mod components;
+pub mod components;
+mod content_view;
+mod counter;
 mod cursor;
 mod dictionary;
 mod text_view;
@@ -19,27 +21,28 @@ mod window;
 pub const APP_ID: &str = "com.github.someone13574.steno";
 
 pub struct MainView {
-    text_view: Entity<TextView>,
+    content_view: Entity<ContentView>,
 }
 
 impl MainView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             Self {
-                text_view: TextView::new(focus_handle, cx),
+                content_view: ContentView::new(focus_handle, cx),
             }
         })
     }
 }
 
 impl Render for MainView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         div()
             .flex()
             .size_full()
             .justify_center()
             .items_center()
-            .child(clamp(px(800.0), px(300.0), 2.0, self.text_view.clone()))
+            .px(cx.theme().csd_corner_radius)
+            .child(clamp(px(1600.0), px(300.0), self.content_view.clone()))
     }
 }
 

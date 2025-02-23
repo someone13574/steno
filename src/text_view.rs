@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use crate::components::continuous_animation::ContinuousAnimationExt;
+use crate::counter::StartCounterEvent;
 use crate::cursor::Cursor;
 use crate::dictionary::Dictionary;
 use crate::theme::ActiveTheme;
@@ -165,13 +166,8 @@ impl Render for TextView {
         let entity = cx.entity().downgrade();
 
         div()
-            .flex()
-            .flex_col()
-            .size_full()
-            .items_center()
-            .justify_center()
             .track_focus(&self.focus_handle)
-            .text_2xl()
+            .text_3xl()
             .font_family("Sans")
             .text_color(cx.theme().text_view_placeholder_text)
             .child(div().with_continuous_animation(
@@ -214,6 +210,8 @@ impl Render for TextView {
                 },
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                cx.emit(StartCounterEvent);
+
                 match (
                     this.text.chars().nth(this.char_head),
                     event.keystroke.key.as_str(),

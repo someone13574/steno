@@ -31,7 +31,7 @@ impl<V: Render> StenoWindow<V> {
                 ..Default::default()
             }),
             app_id: Some(APP_ID.to_string()),
-            window_min_size: Some(size(px(300.0), px(100.0))),
+            window_min_size: Some(size(px(300.0), px(275.0))),
             window_decorations: Some(
                 if cfg!(target_os = "linux")
                     && std::env::var("WAYLAND_DISPLAY").is_ok_and(|v| !v.is_empty())

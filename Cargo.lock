@@ -4099,6 +4099,7 @@ dependencies = [
  "rand 0.9.0",
  "rust-embed",
  "smallvec",
+ "smol",
 ]
 
 [[package]]
