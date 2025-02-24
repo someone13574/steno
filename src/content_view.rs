@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use gpui::prelude::*;
-use gpui::{div, px, Animation, AnimationExt, App, Entity, FocusHandle, Percentage, Window};
+use gpui::{div, point, px, Animation, AnimationExt, App, Entity, FocusHandle, Window};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 use crate::components::clamp::clamp;
 use crate::components::line_chart::LineChart;
@@ -9,8 +11,9 @@ use crate::counter::Counter;
 use crate::text_view::TextView;
 
 pub struct ContentView {
-    text_view: Entity<TextView>,
-    counter: Entity<Counter>,
+    _text_view: Entity<TextView>,
+    _counter: Entity<Counter>,
+    seed: u64,
 }
 
 impl ContentView {
@@ -19,8 +22,9 @@ impl ContentView {
             let text_view = TextView::new(focus_handle.clone(), cx);
 
             Self {
-                text_view: text_view.clone(),
-                counter: Counter::new(text_view, cx),
+                _text_view: text_view.clone(),
+                _counter: Counter::new(text_view, cx),
+                seed: rand::rng().random(),
             }
         })
     }
@@ -41,6 +45,12 @@ impl Render for ContentView {
                         x_axis_label: Some("test".into()),
                         grid_lines_spacing: px(64.0),
                         animation_progress: 1.0,
+                        points: {
+                            let mut rng = StdRng::seed_from_u64(self.seed);
+                            (0..3)
+                                .map(|idx| point(idx as f32, rng.random::<f32>()))
+                                .collect()
+                        },
                     }
                     .with_animation(
                         "chart",
