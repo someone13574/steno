@@ -1,8 +1,8 @@
 use gpui::prelude::*;
 use gpui::{
-    div, point, px, size, transparent_black, App, Bounds, BoxShadow, CursorStyle, Decorations, Div,
-    Entity, FocusHandle, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ResizeEdge,
-    Result, Tiling, TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
+    div, point, px, size, transparent_black, App, BoxShadow, CursorStyle, Decorations, Div, Entity,
+    FocusHandle, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ResizeEdge, Result,
+    Size, Tiling, TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
 };
 use smallvec::smallvec;
 
@@ -32,15 +32,11 @@ impl<V: Render> StenoWindow<V> {
             }),
             app_id: Some(APP_ID.to_string()),
             window_min_size: Some(size(px(300.0), px(275.0))),
-            window_decorations: Some(
-                if cfg!(target_os = "linux")
-                    && std::env::var("WAYLAND_DISPLAY").is_ok_and(|v| !v.is_empty())
-                {
-                    WindowDecorations::Client
-                } else {
-                    WindowDecorations::Server
-                },
-            ),
+            window_decorations: Some(if cfg!(target_os = "linux") {
+                WindowDecorations::Client
+            } else {
+                WindowDecorations::Server
+            }),
             ..Default::default()
         };
 
@@ -92,7 +88,7 @@ impl<V: Render> Render for StenoWindow<V> {
                                 move |this, event: &MouseMoveEvent, window, cx| {
                                     let new_cursor = if let Some(edge) = get_resize_edge(
                                         event.position,
-                                        window.bounds(),
+                                        window.bounds().size,
                                         tiling,
                                         cx.theme().csd_shadow_size,
                                     ) {
@@ -113,7 +109,7 @@ impl<V: Render> Render for StenoWindow<V> {
                                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                                     let new_cursor = if let Some(edge) = get_resize_edge(
                                         event.position,
-                                        window.bounds(),
+                                        window.bounds().size,
                                         tiling,
                                         cx.theme().csd_shadow_size,
                                     ) {
@@ -146,33 +142,35 @@ impl<V: Render> Render for StenoWindow<V> {
 
 fn get_resize_edge(
     position: Point<Pixels>,
-    bounds: Bounds<Pixels>,
+    outer_window_size: Size<Pixels>,
     tiling: Tiling,
     shadow_size: Pixels,
 ) -> Option<ResizeEdge> {
-    let resize_edge_outer = (shadow_size - CSD_RESIZE_EDGE_SIZE).max(px(0.0));
-    let window_bounds = resize_edge_outer + CSD_RESIZE_EDGE_SIZE;
-    let resize_edge_inner = window_bounds + CSD_RESIZE_EDGE_SIZE;
+    let resize_edge_outer_inset = (shadow_size - CSD_RESIZE_EDGE_SIZE).max(px(0.0));
+    let window_bounds_inset = resize_edge_outer_inset + CSD_RESIZE_EDGE_SIZE;
+    let resize_edge_inner_inset = window_bounds_inset + CSD_RESIZE_EDGE_SIZE;
 
     // Check for window obstruction
-    if (tiling.top || position.y > bounds.top() + window_bounds)
-        && (tiling.bottom || position.y < bounds.bottom() - window_bounds)
-        && (tiling.left || position.x > bounds.left() + window_bounds)
-        && (tiling.right || position.x < bounds.right() - window_bounds)
+    if (tiling.top || position.y > window_bounds_inset)
+        && (tiling.bottom || position.y < outer_window_size.height - window_bounds_inset)
+        && (tiling.left || position.x > window_bounds_inset)
+        && (tiling.right || position.x < outer_window_size.width - window_bounds_inset)
     {
         return None;
     }
 
     // Get resize edge
-    let top = !tiling.top && position.y > bounds.top() + resize_edge_outer;
-    let bottom = !tiling.bottom && position.y < bounds.bottom() - resize_edge_outer;
-    let left = !tiling.left && position.x > bounds.left() + resize_edge_outer;
-    let right = !tiling.right && position.x < bounds.right() - resize_edge_outer;
+    let top = !tiling.top && position.y > resize_edge_outer_inset;
+    let bottom = !tiling.bottom && position.y < outer_window_size.height - resize_edge_outer_inset;
+    let left = !tiling.left && position.x > resize_edge_outer_inset;
+    let right = !tiling.right && position.x < outer_window_size.width - resize_edge_outer_inset;
 
-    let top_inner = !tiling.top && position.y < bounds.top() + resize_edge_inner;
-    let bottom_inner = !tiling.bottom && position.y > bounds.bottom() - resize_edge_inner;
-    let left_inner = !tiling.left && position.x < bounds.left() + resize_edge_inner;
-    let right_inner = !tiling.right && position.x > bounds.right() - resize_edge_inner;
+    let top_inner = !tiling.top && position.y < resize_edge_inner_inset;
+    let bottom_inner =
+        !tiling.bottom && position.y > outer_window_size.height - resize_edge_inner_inset;
+    let left_inner = !tiling.left && position.x < resize_edge_inner_inset;
+    let right_inner =
+        !tiling.right && position.x > outer_window_size.width - resize_edge_inner_inset;
 
     match (
         top,
