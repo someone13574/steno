@@ -3,8 +3,8 @@ use std::time::Instant;
 use gpui::prelude::*;
 use gpui::{
     ease_in_out, fill, point, px, relative, size, AnyElement, App, AvailableSpace, Bounds,
-    ContentMask, Element, ElementId, GlobalElementId, Hsla, LayoutId, Path, PathBuilder, Pixels,
-    Point, SharedString, Size, Style, Window,
+    ContentMask, Corners, Edges, Element, ElementId, GlobalElementId, Hsla, LayoutId, PaintQuad,
+    Path, PathBuilder, Pixels, Point, Size, Style, TextStyleRefinement, Window,
 };
 
 use crate::theme::ActiveTheme;
@@ -15,8 +15,8 @@ const LABEL_AVAILABLE_SPACE: Size<AvailableSpace> = Size {
 };
 
 pub struct LineChart {
-    pub x_axis_label: Option<SharedString>,
-    pub grid_lines_spacing: Pixels,
+    pub target_grid_lines_spacing: Pixels,
+    pub scale_rounding: f32,
     pub animation_progress: f32,
     pub points: Vec<Point<f32>>,
 }
@@ -29,18 +29,21 @@ impl IntoElement for LineChart {
     }
 }
 
-pub struct RequestLayout {
-    x_axis_label: Option<AnyElement>,
-}
-
 pub struct Prepaint {
     content_bounds: Bounds<Pixels>,
+
+    num_animation_grid_lines: u32,
+    grid_line_spacing: Pixels,
+    fractional_grid_line: f32,
+
+    y_axis_labels: Vec<AnyElement>,
+    points: Vec<Point<Pixels>>,
     path: Option<Path<Pixels>>,
 }
 
 impl Element for LineChart {
     type PrepaintState = Prepaint;
-    type RequestLayoutState = RequestLayout;
+    type RequestLayoutState = ();
 
     fn id(&self) -> Option<ElementId> {
         Some("chart-element".into())
@@ -57,61 +60,128 @@ impl Element for LineChart {
             ..Default::default()
         };
 
-        (
-            window.request_layout(style, [], cx),
-            RequestLayout {
-                x_axis_label: self
-                    .x_axis_label
-                    .as_ref()
-                    .map(|label| label.clone().into_any_element()),
-            },
-        )
+        (window.request_layout(style, [], cx), ())
     }
 
     fn prepaint(
         &mut self,
-        _id: Option<&GlobalElementId>,
+        id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
+        _request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        // Axes
-        let vertical_offset = if let Some(x_axis_label) = request_layout.x_axis_label.as_mut() {
-            let size = x_axis_label.layout_as_root(LABEL_AVAILABLE_SPACE, window, cx);
-            let label_origin = point(
-                bounds.center().x - size.width / 2.0,
-                bounds.bottom() - size.height,
+        let mut content_bounds = bounds;
+
+        // Determine scale
+        let data_range = self
+            .points
+            .iter()
+            .fold(Point::default(), |max, point| point.max(&max));
+
+        let target_num_grid_lines =
+            (content_bounds.size.height / self.target_grid_lines_spacing + 0.5) as u32;
+        let scale_rounding = self.scale_rounding;
+        let (num_grid_lines_float, scale, units_per_grid_line) =
+            window.with_element_state(id.unwrap(), |state, window| {
+                // Get state
+                let now = Instant::now();
+                let (mut num_grid_lines_float, scale, last_frame) =
+                    state.unwrap_or((target_num_grid_lines as f32, None, None));
+                let elapsed = last_frame.unwrap_or(now).elapsed().as_secs_f32();
+
+                // Calculate grid lines
+                let current_frame =
+                    if (num_grid_lines_float - target_num_grid_lines as f32).abs() > 0.01 {
+                        window.request_animation_frame();
+
+                        let mix = (elapsed * 5.0).clamp(0.0, 1.0);
+                        num_grid_lines_float =
+                            num_grid_lines_float * (1.0 - mix) + target_num_grid_lines as f32 * mix;
+                        Some(now)
+                    } else {
+                        num_grid_lines_float = target_num_grid_lines as f32;
+                        None
+                    };
+
+                // Calculate scale
+                let units_per_grid_line =
+                    (data_range.y / scale_rounding / target_num_grid_lines as f32).ceil()
+                        * scale_rounding;
+
+                let target_scale = units_per_grid_line * target_num_grid_lines as f32;
+                let mut scale = scale.unwrap_or(target_scale);
+
+                let current_frame = if (target_scale - scale).abs() > 0.01 {
+                    window.request_animation_frame();
+
+                    let mix = (elapsed * 5.0).clamp(0.0, 1.0);
+                    scale = scale * (1.0 - mix) + target_scale * mix;
+                    Some(now)
+                } else {
+                    scale = target_scale;
+                    current_frame
+                };
+
+                (
+                    (num_grid_lines_float, scale, units_per_grid_line),
+                    (num_grid_lines_float, Some(scale), current_frame),
+                )
+            });
+
+        let grid_line_spacing = content_bounds.size.height / num_grid_lines_float;
+        let num_animation_grid_lines = (num_grid_lines_float.ceil() + 0.5) as u32;
+        let fractional_grid_line = num_grid_lines_float - num_animation_grid_lines as f32;
+
+        // Y-axis labels
+        let mut max_label_width = px(40.0);
+        let mut y_axis_labels = Vec::with_capacity(num_animation_grid_lines as usize + 1);
+        for (idx, y) in (0..=num_animation_grid_lines).map(|idx| {
+            (
+                idx,
+                px(idx as f32 + fractional_grid_line) * grid_line_spacing,
+            )
+        }) {
+            // Handle out of bounds from resize animation
+            let opacity = ease_in_out((y / grid_line_spacing + 1.0).clamp(0.0, 1.0));
+            let y = y.max(px(0.0));
+
+            // Paint text
+            window.with_text_style(
+                Some(TextStyleRefinement {
+                    color: Some(Hsla::from(cx.theme().base.foreground).opacity(opacity)),
+                    ..Default::default()
+                }),
+                |window| {
+                    let mut label = format!(
+                        "{}",
+                        (num_animation_grid_lines - idx) as f64 * units_per_grid_line as f64
+                    )
+                    .into_any_element();
+                    let label_size = label.layout_as_root(LABEL_AVAILABLE_SPACE, window, cx);
+                    max_label_width = max_label_width.max(label_size.width);
+
+                    label.prepaint_at(
+                        content_bounds.origin + point(px(0.0), y - label_size.height / 2.0),
+                        window,
+                        cx,
+                    );
+                    y_axis_labels.push(label);
+                },
             );
-            x_axis_label.prepaint_at(label_origin, window, cx);
+        }
 
-            size.height
-        } else {
-            px(0.0)
-        };
-
-        let content_bounds = Bounds {
-            origin: bounds.origin + point(px(0.0), vertical_offset),
-            size: size(bounds.size.width, bounds.size.height - vertical_offset * 2),
-        };
+        content_bounds.size.width -= max_label_width * 2.0;
+        content_bounds.origin.x += max_label_width;
 
         // Create path
-        let (mut data_max, mut data_min) = self.points.iter().fold(
-            (point(-10000.0, -10000.0), point(10000.0, 10000.0)),
-            |(max, min), point| (point.max(&max), point.min(&min)),
-        );
-        let data_range = data_max - data_min;
-        data_max.y += data_range.y * 0.1;
-        data_min.y -= data_range.y * 0.1;
-        let data_range = data_max - data_min;
-
         let scaled_points: Vec<Point<Pixels>> = self
             .points
             .iter()
             .map(|point| {
                 Point {
-                    x: px(point.x - data_min.x) / data_range.x * content_bounds.size.width,
-                    y: px(point.y - data_min.y) / data_range.y * -content_bounds.size.height,
+                    x: px(point.x) / data_range.x * content_bounds.size.width,
+                    y: px(point.y) / scale * -content_bounds.size.height,
                 } + content_bounds.bottom_left()
             })
             .collect();
@@ -128,28 +198,34 @@ impl Element for LineChart {
             // Get smoothing factor
             let segment = point_b - point_a;
             let length = segment.x.abs().min(px(segment.magnitude() as f32)); // Use min of x difference to prevent going backwards
-            let smoothing = length / 2.0;
+            let smoothing = length * 0.33;
 
-            // Control points (clamp to prevent line from leaving content bounds)
-            let control_a = (point_a + tangent_a * smoothing)
-                .clamp(&content_bounds.origin, &content_bounds.bottom_right());
-            let control_b = (point_b - tangent_b * smoothing)
-                .clamp(&content_bounds.origin, &content_bounds.bottom_right());
+            // Control points
+            let mut control_a = point_a + tangent_a * smoothing;
+            let mut control_b = point_b - tangent_b * smoothing;
+
+            control_a = control_a.clamp(&point_a.min(&point_b), &point_a.max(&point_b));
+            control_b = control_b.clamp(&point_a.min(&point_b), &point_a.max(&point_b));
 
             path.cubic_bezier_to(point_b, control_a, control_b);
         }
 
         Prepaint {
             content_bounds,
+            num_animation_grid_lines,
+            grid_line_spacing,
+            fractional_grid_line,
+            points: scaled_points,
             path: Some(path.build().unwrap()),
+            y_axis_labels,
         }
     }
 
     fn paint(
         &mut self,
-        id: Option<&GlobalElementId>,
+        _id: Option<&GlobalElementId>,
         _bounds: Bounds<Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
+        _request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
@@ -157,35 +233,12 @@ impl Element for LineChart {
         let grid_lines_finish = 0.75;
         let main_line_delay = 0.25;
 
-        // Horizontal grid lines
-        let num_grid_lines =
-            (prepaint.content_bounds.size.height / self.grid_lines_spacing + 0.5) as u32;
-        let num_grid_lines_float = window.with_element_state(id.unwrap(), |state, window| {
-            let (mut state, last_frame) = state.unwrap_or((num_grid_lines as f32, None));
-            let last_frame = last_frame.unwrap_or(Instant::now());
-            let elapsed = last_frame.elapsed().as_secs_f32();
-
-            let last_frame = if (num_grid_lines as f32 - state).abs() > 0.01 {
-                let mix = (elapsed * 5.0).clamp(0.0, 1.0);
-                state = state * (1.0 - mix) + num_grid_lines as f32 * mix;
-                window.request_animation_frame();
-                Some(Instant::now())
-            } else {
-                state = num_grid_lines as f32;
-                None
-            };
-
-            (state, (state, last_frame))
-        });
-        let grid_line_spacing = prepaint.content_bounds.size.height / num_grid_lines_float;
-        let num_grid_lines = (num_grid_lines_float.ceil() + 0.5) as u32;
-        let num_grid_lines_diff = num_grid_lines_float - num_grid_lines as f32;
-
-        for y in
-            (0..num_grid_lines).map(|idx| px(idx as f32 + num_grid_lines_diff) * grid_line_spacing)
+        // Grid lines
+        for y in (0..prepaint.num_animation_grid_lines)
+            .map(|idx| px(idx as f32 + prepaint.fractional_grid_line) * prepaint.grid_line_spacing)
         {
             // Handle out of bounds from resize animation
-            let opacity = ease_in_out((y / grid_line_spacing + 1.0).clamp(0.0, 1.0));
+            let opacity = ease_in_out((y / prepaint.grid_line_spacing + 1.0).clamp(0.0, 1.0));
             let y = y.max(px(0.0));
 
             // Determine progress
@@ -208,15 +261,14 @@ impl Element for LineChart {
         }
 
         // Path
+        let path_progress =
+            ((self.animation_progress - main_line_delay) / (1.0 - main_line_delay)).clamp(0.0, 1.0);
         window.with_content_mask(
             Some(ContentMask {
                 bounds: Bounds {
                     origin: prepaint.content_bounds.origin,
                     size: size(
-                        prepaint.content_bounds.size.width
-                            * (((self.animation_progress - main_line_delay)
-                                / (1.0 - main_line_delay))
-                                .clamp(0.0, 1.0)),
+                        prepaint.content_bounds.size.width * path_progress,
                         prepaint.content_bounds.size.height,
                     ),
                 },
@@ -225,6 +277,28 @@ impl Element for LineChart {
                 window.paint_path(prepaint.path.take().unwrap(), cx.theme().base.foreground);
             },
         );
+
+        for point in &prepaint.points {
+            if point.x
+                > prepaint.content_bounds.size.width * path_progress
+                    + prepaint.content_bounds.origin.x
+            {
+                break;
+            }
+
+            window.paint_quad(PaintQuad {
+                bounds: Bounds::centered_at(*point, size(px(8.0), px(8.0))),
+                corner_radii: Corners {
+                    top_left: px(4.0),
+                    top_right: px(4.0),
+                    bottom_right: px(4.0),
+                    bottom_left: px(4.0),
+                },
+                background: cx.theme().base.foreground.into(),
+                border_widths: Edges::default(),
+                border_color: gpui::transparent_black(),
+            });
+        }
 
         // Axes
         window.paint_quad(fill(
@@ -242,8 +316,8 @@ impl Element for LineChart {
             cx.theme().base.foreground,
         ));
 
-        if let Some(x_axis_label) = request_layout.x_axis_label.as_mut() {
-            x_axis_label.paint(window, cx);
+        for label in &mut prepaint.y_axis_labels {
+            label.paint(window, cx);
         }
     }
 }

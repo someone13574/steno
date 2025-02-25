@@ -41,7 +41,7 @@ impl Render for MainView {
             .size_full()
             .justify_center()
             .items_center()
-            .px(cx.theme().csd_corner_radius)
+            .p(cx.theme().csd_corner_radius)
             .child(clamp(px(1600.0), px(300.0), self.content_view.clone()))
     }
 }

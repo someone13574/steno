@@ -42,13 +42,13 @@ impl Render for ContentView {
                     px(500.0),
                     px(300.0),
                     LineChart {
-                        x_axis_label: Some("test".into()),
-                        grid_lines_spacing: px(64.0),
+                        target_grid_lines_spacing: px(64.0),
+                        scale_rounding: 5.0,
                         animation_progress: 1.0,
                         points: {
                             let mut rng = StdRng::seed_from_u64(self.seed);
-                            (0..3)
-                                .map(|idx| point(idx as f32, rng.random::<f32>()))
+                            (0..5)
+                                .map(|idx| point(idx as f32, rng.random::<f32>() * 100.0))
                                 .collect()
                         },
                     }
