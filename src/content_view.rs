@@ -42,14 +42,22 @@ impl Render for ContentView {
                     px(500.0),
                     px(300.0),
                     LineChart {
-                        target_grid_lines_spacing: px(64.0),
-                        scale_rounding: 5.0,
+                        target_grid_lines_spacing: px(32.0),
+                        scale_rounding: 2.0,
                         animation_progress: 1.0,
                         points: {
+                            let n = 10;
+
                             let mut rng = StdRng::seed_from_u64(self.seed);
-                            (0..5)
-                                .map(|idx| point(idx as f32, rng.random::<f32>() * 100.0))
-                                .collect()
+                            let mut points = Vec::with_capacity(n);
+                            let mut y = 50.0;
+                            for x in 0..n {
+                                y += (rng.random::<f32>() - 0.45) * 50.0;
+                                y = y.max(0.0);
+                                points.push(point(x as f32, y));
+                            }
+
+                            points
                         },
                     }
                     .with_animation(

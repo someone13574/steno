@@ -195,17 +195,14 @@ impl Element for LineChart {
             let tangent_a = tangents[idx];
             let tangent_b = tangents[idx + 1];
 
-            // Get smoothing factor
-            let segment = point_b - point_a;
-            let length = segment.x.abs().min(px(segment.magnitude() as f32)); // Use min of x difference to prevent going backwards
-            let smoothing = length * 0.33;
-
             // Control points
-            let mut control_a = point_a + tangent_a * smoothing;
-            let mut control_b = point_b - tangent_b * smoothing;
+            let segment = point_b - point_a;
+            let dot_a = segment.x * tangent_a.x + segment.y * tangent_a.y;
+            let dot_b = segment.x * tangent_b.x + segment.y * tangent_b.y;
 
-            control_a = control_a.clamp(&point_a.min(&point_b), &point_a.max(&point_b));
-            control_b = control_b.clamp(&point_a.min(&point_b), &point_a.max(&point_b));
+            let smoothing = 1.0 / 3.0;
+            let control_a = point_a + tangent_a * dot_a * smoothing;
+            let control_b = point_b - tangent_b * dot_b * smoothing;
 
             path.cubic_bezier_to(point_b, control_a, control_b);
         }
@@ -332,6 +329,12 @@ fn tangents(points: &[Point<Pixels>]) -> Vec<Point<Pixels>> {
         let unnormalized = match idx {
             0 => points[1] - point,
             idx if idx == points.len() - 1 => point - points[idx - 1],
+            _ if (points[idx + 1].y > points[idx].y) == (points[idx - 1].y > points[idx].y) => {
+                Point {
+                    x: px(1.0),
+                    y: px(0.0),
+                }
+            }
             _ => (points[idx + 1] - points[idx - 1]) * 0.5,
         };
 
