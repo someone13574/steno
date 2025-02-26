@@ -106,7 +106,7 @@ impl Element for LineChart {
 
                 // Calculate scale
                 let units_per_grid_line =
-                    (data_range.y / scale_rounding / target_num_grid_lines as f32).ceil()
+                    (data_range.y * 1.1 / scale_rounding / target_num_grid_lines as f32).ceil()
                         * scale_rounding;
 
                 let target_scale = units_per_grid_line * target_num_grid_lines as f32;
@@ -188,23 +188,25 @@ impl Element for LineChart {
         let tangents = tangents(&scaled_points);
 
         let mut path = PathBuilder::stroke(px(2.0));
-        path.move_to(scaled_points[0]);
-        for idx in 0..(scaled_points.len() - 1) {
-            let point_a = scaled_points[idx];
-            let point_b = scaled_points[idx + 1];
-            let tangent_a = tangents[idx];
-            let tangent_b = tangents[idx + 1];
+        if !scaled_points.is_empty() {
+            path.move_to(scaled_points[0]);
+            for idx in 0..(scaled_points.len().saturating_sub(1)) {
+                let point_a = scaled_points[idx];
+                let point_b = scaled_points[idx + 1];
+                let tangent_a = tangents[idx];
+                let tangent_b = tangents[idx + 1];
 
-            // Control points
-            let segment = point_b - point_a;
-            let dot_a = segment.x * tangent_a.x + segment.y * tangent_a.y;
-            let dot_b = segment.x * tangent_b.x + segment.y * tangent_b.y;
+                // Control points
+                let segment = point_b - point_a;
+                let dot_a = segment.x * tangent_a.x + segment.y * tangent_a.y;
+                let dot_b = segment.x * tangent_b.x + segment.y * tangent_b.y;
 
-            let smoothing = 1.0 / 3.0;
-            let control_a = point_a + tangent_a * dot_a * smoothing;
-            let control_b = point_b - tangent_b * dot_b * smoothing;
+                let smoothing = 1.0 / 3.0;
+                let control_a = point_a + tangent_a * dot_a * smoothing;
+                let control_b = point_b - tangent_b * dot_b * smoothing;
 
-            path.cubic_bezier_to(point_b, control_a, control_b);
+                path.cubic_bezier_to(point_b, control_a, control_b);
+            }
         }
 
         Prepaint {
@@ -320,8 +322,8 @@ impl Element for LineChart {
 }
 
 fn tangents(points: &[Point<Pixels>]) -> Vec<Point<Pixels>> {
-    if points.len() <= 2 {
-        return Vec::new();
+    if points.len() <= 1 {
+        return [point(px(1.0), px(0.0))][..points.len()].to_vec();
     }
 
     let mut tangents = Vec::with_capacity(points.len());

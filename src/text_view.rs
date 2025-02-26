@@ -15,6 +15,7 @@ pub struct TextView {
     text: String,
     char_head: usize,
     utf8_head: usize,
+    pub typed_chars: usize,
     over_inserted_stack: Vec<usize>,
     run_lens: Vec<(bool, usize)>,
     focus_handle: FocusHandle,
@@ -30,6 +31,7 @@ impl TextView {
                 text: Dictionary::random_text(50, cx),
                 char_head: 0,
                 utf8_head: 0,
+                typed_chars: 0,
                 over_inserted_stack: vec![0],
                 run_lens: Vec::new(),
                 focus_handle,
@@ -185,7 +187,7 @@ impl Render for TextView {
                 move |element, current_scroll, delta, window, _cx| {
                     let magnitude = (*current_scroll - target_scroll).abs().0;
                     let animating = if magnitude > 0.5 && window_active && animate_scroll {
-                        let mix = (delta * 20.0).clamp(0.0, 1.0);
+                        let mix = (delta * 15.0).clamp(0.0, 1.0);
                         *current_scroll = *current_scroll * (1.0 - mix) + target_scroll * mix;
                         true
                     } else {
@@ -258,11 +260,13 @@ impl Render for TextView {
                             replaced.len_utf8(),
                             replace_with.chars().count(),
                         );
+                        this.typed_chars += replace_with.chars().count();
                     }
                     (_, _, Some(to_insert)) => {
                         this.text.insert_str(this.utf8_head, to_insert);
                         this.add_run(false, to_insert.len(), to_insert.chars().count());
                         *this.over_inserted_stack.last_mut().unwrap() += to_insert.len();
+                        this.typed_chars += to_insert.chars().count();
                     }
                     _ => {}
                 }
