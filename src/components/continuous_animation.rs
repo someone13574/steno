@@ -3,6 +3,8 @@ use std::time::Instant;
 use gpui::prelude::*;
 use gpui::{AnyElement, App, Bounds, ElementId, GlobalElementId, LayoutId, Pixels, Window};
 
+use crate::theme::ActiveTheme;
+
 type ContinuousAnimationFn<E, S> = Box<dyn Fn(E, &mut S, f32, &mut Window, &mut App) -> (E, bool)>;
 
 pub trait ContinuousAnimationExt {
@@ -58,7 +60,7 @@ impl<E: IntoElement + 'static, S: Clone + 'static> Element for ContinuousAnimati
         window.with_element_state(id.unwrap(), |state: Option<(Instant, S)>, window| {
             let (last_frame, mut state) =
                 state.unwrap_or((Instant::now(), self.initial_state.clone()));
-            let delta = last_frame.elapsed().as_secs_f32();
+            let delta = last_frame.elapsed().as_secs_f32() * cx.theme().base.animation_speed;
 
             let (element, animate) =
                 (self.animator)(self.element.take().unwrap(), &mut state, delta, window, cx);

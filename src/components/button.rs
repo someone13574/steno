@@ -6,7 +6,6 @@ use crate::theme::ActiveTheme;
 type MouseDownListener = dyn Fn(&MouseDownEvent, &mut Window, &mut App);
 
 pub struct Button {
-    hovered: bool,
     svg: Option<&'static str>,
     mouse_down_listener: Option<Box<MouseDownListener>>,
     theme_fn: fn(&mut App) -> ButtonTheme,
@@ -15,7 +14,6 @@ pub struct Button {
 impl Button {
     pub fn builder() -> Self {
         Button {
-            hovered: false,
             svg: None,
             mouse_down_listener: None,
             theme_fn: |_cx| ButtonTheme::default(),
@@ -67,13 +65,7 @@ impl Render for Button {
                         .size_full(),
                 )
             })
-            .when(self.hovered, |div| {
-                div.bg(background_hover.unwrap_or(cx.theme().base.hover_background))
-            })
-            .on_hover(cx.listener(|this, hovered, _window, cx| {
-                this.hovered = *hovered;
-                cx.notify();
-            }))
+            .hover(|style| style.bg(background_hover.unwrap_or(cx.theme().base.hover_background)))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event, window, cx| {

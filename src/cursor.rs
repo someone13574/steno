@@ -56,7 +56,7 @@ impl Render for Cursor {
                     position: Point::default(),
                     idle_start: Instant::now(),
                 },
-                move |element, state, delta, _window, _cx| {
+                move |element, state, delta, _window, cx| {
                     // Update state
                     let magnitude = (state.position - target_position).magnitude();
                     if animate_movement && magnitude > 0.5 && !state.position.is_zero() {
@@ -69,8 +69,12 @@ impl Render for Cursor {
 
                     // Get style
                     let element_position = state.position + text_origin;
-                    let cursor_pulse =
-                        (state.idle_start.elapsed().as_secs_f32() * PI).cos() * 0.5 + 0.5;
+                    let cursor_pulse = (state.idle_start.elapsed().as_secs_f32()
+                        * PI
+                        * cx.theme().base.animation_speed)
+                        .cos()
+                        * 0.5
+                        + 0.5;
 
                     (
                         element

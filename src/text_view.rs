@@ -255,18 +255,17 @@ impl Render for TextView {
                         }
                     }
                     (Some(replaced), _, Some(replace_with)) if !replaced.is_whitespace() => {
-                        this.add_run(
-                            replaced.to_string() == *replace_with,
-                            replaced.len_utf8(),
-                            replace_with.chars().count(),
-                        );
-                        this.typed_chars += replace_with.chars().count();
+                        let correct = replaced.to_string() == *replace_with;
+                        this.add_run(correct, replaced.len_utf8(), replace_with.chars().count());
+
+                        if correct {
+                            this.typed_chars += replace_with.chars().count();
+                        }
                     }
                     (_, _, Some(to_insert)) => {
                         this.text.insert_str(this.utf8_head, to_insert);
                         this.add_run(false, to_insert.len(), to_insert.chars().count());
                         *this.over_inserted_stack.last_mut().unwrap() += to_insert.len();
-                        this.typed_chars += to_insert.chars().count();
                     }
                     _ => {}
                 }

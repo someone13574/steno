@@ -2,6 +2,8 @@ use gpui::{px, rgb, rgba, App, Context, Global, Pixels, Rgba, Window, WindowAppe
 
 #[derive(Clone, Copy)]
 pub struct BaseTheme {
+    pub animation_speed: f32,
+
     pub background: Rgba,
     pub border: Rgba,
     pub dim_foreground: Rgba,
@@ -19,6 +21,7 @@ pub struct BaseTheme {
 impl BaseTheme {
     pub fn default_light() -> Self {
         Self {
+            animation_speed: 1.0,
             background: rgb(0xffffff),
             border: rgb(0xd0d0d0),
             dim_foreground: rgba(0x000000a0),
@@ -34,6 +37,7 @@ impl BaseTheme {
 
     pub fn default_dark() -> Self {
         Self {
+            animation_speed: 1.0,
             background: rgb(0x202020),
             border: rgb(0x303030),
             dim_foreground: rgba(0xffffff20),

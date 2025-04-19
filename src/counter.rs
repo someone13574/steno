@@ -9,6 +9,7 @@ use crate::text_view::TextView;
 use crate::theme::ActiveTheme;
 
 const WPM_CHARS_PER_WORD: f32 = 5.0;
+const NUM_SAMPLES: u32 = 10;
 
 pub struct Counter {
     start_time: Option<Instant>,
@@ -30,7 +31,7 @@ impl Counter {
 
             Self {
                 start_time: None,
-                duration: 15,
+                duration: 30,
                 text_view,
             }
         })
@@ -43,33 +44,39 @@ impl Counter {
         }
 
         let start_time = Instant::now();
+        let sample_interval = Duration::from_secs(self.duration) / NUM_SAMPLES;
         self.start_time = Some(start_time);
 
-        let num_samples = self.duration as usize + 1;
         cx.spawn(async move |counter, mut cx| {
             let mut last_typed_count = 0;
-            let mut wpm_measurements = Vec::with_capacity(num_samples);
+            let mut wpm_measurements = Vec::with_capacity(NUM_SAMPLES as usize + 1);
 
-            let mut timer = Timer::interval_at(start_time, Duration::from_secs(1));
+            let mut timer =
+                Timer::interval_at(start_time, sample_interval.min(Duration::from_millis(100)));
+            let mut last_sample = Instant::now();
             timer.next().await;
+
             while timer.next().await.is_some() {
                 let active = counter
                     .update(&mut cx, |counter, cx| {
-                        let current_typed_count = counter.text_view.read(cx).typed_chars;
-                        wpm_measurements.push(
-                            (current_typed_count - last_typed_count) as f32 / WPM_CHARS_PER_WORD
-                                * 60.0,
-                        );
-                        last_typed_count = current_typed_count;
-
-                        if counter
-                            .start_time
-                            .is_some_and(|start| start.elapsed().as_secs() > counter.duration)
+                        if last_sample.elapsed().abs_diff(sample_interval)
+                            < Duration::from_millis(10)
                         {
-                            cx.emit(CounterFinishedEvent {
-                                wpm_measurements: wpm_measurements.clone(),
-                            });
-                            return false;
+                            let current_typed_count = counter.text_view.read(cx).typed_chars;
+                            wpm_measurements.push(
+                                (current_typed_count - last_typed_count) as f32
+                                    / WPM_CHARS_PER_WORD
+                                    * (60.0 / sample_interval.as_secs_f32()),
+                            );
+                            last_typed_count = current_typed_count;
+                            last_sample = Instant::now();
+
+                            if wpm_measurements.len() + 1 == NUM_SAMPLES as usize {
+                                cx.emit(CounterFinishedEvent {
+                                    wpm_measurements: wpm_measurements.clone(),
+                                });
+                                return false;
+                            }
                         }
 
                         cx.notify();

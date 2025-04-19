@@ -88,7 +88,8 @@ impl Element for LineChart {
                 let now = Instant::now();
                 let (mut num_grid_lines_float, scale, last_frame) =
                     state.unwrap_or((target_num_grid_lines as f32, None, None));
-                let elapsed = last_frame.unwrap_or(now).elapsed().as_secs_f32();
+                let elapsed = last_frame.unwrap_or(now).elapsed().as_secs_f32()
+                    * cx.theme().base.animation_speed;
 
                 // Calculate grid lines
                 let current_frame =
@@ -265,7 +266,7 @@ impl Element for LineChart {
         window.with_content_mask(
             Some(ContentMask {
                 bounds: Bounds {
-                    origin: prepaint.content_bounds.origin,
+                    origin: prepaint.content_bounds.origin + point(px(2.0), px(0.0)),
                     size: size(
                         prepaint.content_bounds.size.width * path_progress,
                         prepaint.content_bounds.size.height,
@@ -277,7 +278,7 @@ impl Element for LineChart {
             },
         );
 
-        for point in &prepaint.points {
+        for point in &prepaint.points[1..] {
             if point.x
                 > prepaint.content_bounds.size.width * path_progress
                     + prepaint.content_bounds.origin.x
