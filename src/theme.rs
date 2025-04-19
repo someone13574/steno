@@ -25,7 +25,7 @@ impl BaseTheme {
             background: rgb(0xffffff),
             border: rgb(0xd0d0d0),
             dim_foreground: rgba(0x000000a0),
-            foreground: rgb(0x505050),
+            foreground: rgb(0x202020),
             hover_background: rgb(0xe0e0e0),
             border_width: px(1.0),
             gap: px(8.0),
@@ -86,6 +86,7 @@ pub struct Theme {
 impl Theme {
     pub fn default_light() -> Self {
         Self {
+            text_view_incorrect_text: rgb(0xf44336),
             ..Self::from(BaseTheme::default_light())
         }
     }
