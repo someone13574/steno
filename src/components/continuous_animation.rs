@@ -1,7 +1,10 @@
 use std::time::Instant;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, App, Bounds, ElementId, GlobalElementId, LayoutId, Pixels, Window};
+use gpui::{
+    AnyElement, App, Bounds, ElementId, GlobalElementId, InspectorElementId, LayoutId, Pixels,
+    Window,
+};
 
 use crate::theme::ActiveTheme;
 
@@ -51,9 +54,14 @@ impl<E: IntoElement + 'static, S: Clone + 'static> Element for ContinuousAnimati
         Some(self.id.clone())
     }
 
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
@@ -80,6 +88,7 @@ impl<E: IntoElement + 'static, S: Clone + 'static> Element for ContinuousAnimati
     fn prepaint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         _bounds: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -91,6 +100,7 @@ impl<E: IntoElement + 'static, S: Clone + 'static> Element for ContinuousAnimati
     fn paint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         _bounds: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _prepaint: &mut Self::PrepaintState,

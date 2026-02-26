@@ -47,7 +47,7 @@ impl Counter {
         let sample_interval = Duration::from_secs(self.duration) / NUM_SAMPLES;
         self.start_time = Some(start_time);
 
-        cx.spawn(async move |counter, mut cx| {
+        cx.spawn(async move |counter, cx| {
             let mut last_typed_count = 0;
             let mut wpm_measurements = Vec::with_capacity(NUM_SAMPLES as usize + 1);
 
@@ -58,7 +58,7 @@ impl Counter {
 
             while timer.next().await.is_some() {
                 let active = counter
-                    .update(&mut cx, |counter, cx| {
+                    .update(cx, |counter, cx| {
                         if last_sample.elapsed().abs_diff(sample_interval)
                             < Duration::from_millis(10)
                         {

@@ -2,9 +2,10 @@ use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{
-    ease_in_out, fill, point, px, relative, size, AnyElement, App, AvailableSpace, Bounds,
-    ContentMask, Corners, Edges, Element, ElementId, GlobalElementId, Hsla, LayoutId, PaintQuad,
-    Path, PathBuilder, Pixels, Point, Size, Style, TextStyleRefinement, Window,
+    ease_in_out, fill, point, px, relative, size, AnyElement, App, AvailableSpace, BorderStyle,
+    Bounds, ContentMask, Corners, Edges, Element, ElementId, GlobalElementId, Hsla,
+    InspectorElementId, LayoutId, PaintQuad, Path, PathBuilder, Pixels, Point, Size, Style,
+    TextStyleRefinement, Window,
 };
 
 use crate::theme::ActiveTheme;
@@ -49,9 +50,14 @@ impl Element for LineChart {
         Some("chart-element".into())
     }
 
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
@@ -66,6 +72,7 @@ impl Element for LineChart {
     fn prepaint(
         &mut self,
         id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -137,12 +144,9 @@ impl Element for LineChart {
         // Y-axis labels
         let mut max_label_width = px(40.0);
         let mut y_axis_labels = Vec::with_capacity(num_animation_grid_lines as usize + 1);
-        for (idx, y) in (0..=num_animation_grid_lines).map(|idx| {
-            (
-                idx,
-                px(idx as f32 + fractional_grid_line) * grid_line_spacing,
-            )
-        }) {
+        for (idx, y) in (0..=num_animation_grid_lines)
+            .map(|idx| (idx, grid_line_spacing * (idx as f32 + fractional_grid_line)))
+        {
             // Handle out of bounds from resize animation
             let opacity = ease_in_out((y / grid_line_spacing + 1.0).clamp(0.0, 1.0));
             let y = y.max(px(0.0));
@@ -176,13 +180,15 @@ impl Element for LineChart {
         content_bounds.origin.x += max_label_width;
 
         // Create path
+        let x_denom = data_range.x.max(f32::EPSILON);
+        let y_denom = scale.max(f32::EPSILON);
         let scaled_points: Vec<Point<Pixels>> = self
             .points
             .iter()
             .map(|point| {
                 Point {
-                    x: px(point.x) / data_range.x * content_bounds.size.width,
-                    y: px(point.y) / scale * -content_bounds.size.height,
+                    x: content_bounds.size.width * (point.x / x_denom),
+                    y: content_bounds.size.height * -(point.y / y_denom),
                 } + content_bounds.bottom_left()
             })
             .collect();
@@ -199,8 +205,10 @@ impl Element for LineChart {
 
                 // Control points
                 let segment = point_b - point_a;
-                let dot_a = segment.x * tangent_a.x + segment.y * tangent_a.y;
-                let dot_b = segment.x * tangent_b.x + segment.y * tangent_b.y;
+                let dot_a = segment.x.as_f32() * tangent_a.x.as_f32()
+                    + segment.y.as_f32() * tangent_a.y.as_f32();
+                let dot_b = segment.x.as_f32() * tangent_b.x.as_f32()
+                    + segment.y.as_f32() * tangent_b.y.as_f32();
 
                 let smoothing = 1.0 / 3.0;
                 let control_a = point_a + tangent_a * dot_a * smoothing;
@@ -224,6 +232,7 @@ impl Element for LineChart {
     fn paint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         _bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
@@ -235,7 +244,7 @@ impl Element for LineChart {
 
         // Grid lines
         for y in (0..prepaint.num_animation_grid_lines)
-            .map(|idx| px(idx as f32 + prepaint.fractional_grid_line) * prepaint.grid_line_spacing)
+            .map(|idx| prepaint.grid_line_spacing * (idx as f32 + prepaint.fractional_grid_line))
         {
             // Handle out of bounds from resize animation
             let opacity = ease_in_out((y / prepaint.grid_line_spacing + 1.0).clamp(0.0, 1.0));
@@ -297,6 +306,7 @@ impl Element for LineChart {
                 background: cx.theme().base.foreground.into(),
                 border_widths: Edges::default(),
                 border_color: gpui::transparent_black(),
+                border_style: BorderStyle::Solid,
             });
         }
 
@@ -341,7 +351,12 @@ fn tangents(points: &[Point<Pixels>]) -> Vec<Point<Pixels>> {
             _ => (points[idx + 1] - points[idx - 1]) * 0.5,
         };
 
-        let factor = px(1.0 / unnormalized.magnitude() as f32);
+        let magnitude = unnormalized.magnitude() as f32;
+        let factor = if magnitude > 0.0 {
+            1.0 / magnitude
+        } else {
+            0.0
+        };
         tangents.push(unnormalized * factor);
     }
 

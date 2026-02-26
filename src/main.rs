@@ -2,8 +2,10 @@ use assets::Assets;
 use components::clamp::clamp;
 use content_view::ContentView;
 use dictionary::Dictionary;
+
 use gpui::prelude::*;
-use gpui::{div, px, App, Application, Entity, FocusHandle, Window};
+use gpui::{div, px, App, Entity, FocusHandle, Window};
+use gpui_platform::application;
 use theme::{ActiveTheme, BaseTheme, Theme};
 use window::StenoWindow;
 
@@ -47,7 +49,7 @@ impl Render for MainView {
 }
 
 fn main() {
-    Application::new().with_assets(Assets).run({
+    application().with_assets(Assets).run({
         |cx| {
             cx.set_global(Theme::from(BaseTheme::default_dark()));
             Dictionary::new("en", 250, true).set_global(cx);

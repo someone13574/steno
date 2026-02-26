@@ -1,8 +1,8 @@
 use gpui::prelude::*;
 use gpui::{
     anchored, div, point, px, AnchoredPositionMode, App, Bounds, ElementId, Entity, FocusHandle,
-    GlobalElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText, TextLayout, TextRun,
-    Window,
+    GlobalElementId, InspectorElementId, KeyDownEvent, LayoutId, Pixels, Point, StyledText,
+    TextLayout, TextRun, Window,
 };
 
 use crate::components::continuous_animation::ContinuousAnimationExt;
@@ -26,19 +26,17 @@ pub struct TextView {
 
 impl TextView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| {
-            Self {
-                text: Dictionary::random_text(50, cx),
-                char_head: 0,
-                utf8_head: 0,
-                typed_chars: 0,
-                over_inserted_stack: vec![0],
-                run_lens: Vec::new(),
-                focus_handle,
-                cursor: Cursor::new(cx),
-                target_scroll: px(0.0),
-                animate_scroll: true,
-            }
+        cx.new(|cx| Self {
+            text: Dictionary::random_text(50, cx),
+            char_head: 0,
+            utf8_head: 0,
+            typed_chars: 0,
+            over_inserted_stack: vec![0],
+            run_lens: Vec::new(),
+            focus_handle,
+            cursor: Cursor::new(cx),
+            target_scroll: px(0.0),
+            animate_scroll: true,
         })
     }
 
@@ -185,8 +183,8 @@ impl Render for TextView {
                 "text-entry-animation",
                 px(0.0),
                 move |element, current_scroll, delta, window, _cx| {
-                    let magnitude = (*current_scroll - target_scroll).abs().0;
-                    let animating = if magnitude > 0.5 && window_active && animate_scroll {
+                    let magnitude = (*current_scroll - target_scroll).abs();
+                    let animating = if magnitude > px(0.5) && window_active && animate_scroll {
                         let mix = (delta * 15.0).clamp(0.0, 1.0);
                         *current_scroll = *current_scroll * (1.0 - mix) + target_scroll * mix;
                         true
@@ -297,9 +295,14 @@ impl Element for TextViewElement {
         None
     }
 
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
@@ -310,19 +313,17 @@ impl Element for TextViewElement {
         let runs = text_view
             .run_lens
             .iter()
-            .map(|(correct, run_len)| {
-                TextRun {
-                    len: *run_len,
-                    font: text_style.font(),
-                    color: if *correct {
-                        cx.theme().text_view_correct_text.into()
-                    } else {
-                        cx.theme().text_view_incorrect_text.into()
-                    },
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                }
+            .map(|(correct, run_len)| TextRun {
+                len: *run_len,
+                font: text_style.font(),
+                color: if *correct {
+                    cx.theme().text_view_correct_text.into()
+                } else {
+                    cx.theme().text_view_incorrect_text.into()
+                },
+                background_color: None,
+                underline: None,
+                strikethrough: None,
             })
             .chain([TextRun {
                 len: text_view.text.len() - text_view.utf8_head,
@@ -335,19 +336,23 @@ impl Element for TextViewElement {
             .collect();
 
         let mut styled_text = StyledText::new(&text_view.text).with_runs(runs);
-        (styled_text.request_layout(None, window, cx).0, styled_text)
+        (
+            styled_text.request_layout(None, None, window, cx).0,
+            styled_text,
+        )
     }
 
     fn prepaint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
         let scrolled_bounds = bounds - point(px(0.0), self.scroll);
-        styled_text.prepaint(None, scrolled_bounds, &mut (), window, cx);
+        styled_text.prepaint(None, None, scrolled_bounds, &mut (), window, cx);
 
         self.entity.update(cx, |text_view, cx| {
             let utf8_len = text_view
@@ -408,6 +413,7 @@ impl Element for TextViewElement {
     fn paint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         styled_text: &mut Self::RequestLayoutState,
         _prepaint: &mut Self::PrepaintState,
@@ -415,6 +421,7 @@ impl Element for TextViewElement {
         cx: &mut App,
     ) {
         styled_text.paint(
+            None,
             None,
             bounds - point(px(0.0), self.scroll),
             &mut (),

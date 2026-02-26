@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::{div, App, AppContext, Entity, MouseButton, Render, Window};
+use gpui::{div, App, AppContext, Entity, Render, Window};
 
 use crate::components::button::{Button, ButtonTheme};
 use crate::theme::ActiveTheme;
@@ -59,7 +59,7 @@ impl<V: Render> Render for Titlebar<V> {
                 }
             })
             .on_click(|event, window, _cx| {
-                if event.down.click_count >= 2 && event.down.button == MouseButton::Left {
+                if event.standard_click() && event.click_count() >= 2 {
                     window.zoom_window();
                 }
             })

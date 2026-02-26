@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{
     point, px, relative, size, AnyElement, App, AvailableSpace, Axis, Bounds, ElementId,
-    GlobalElementId, LayoutId, Length, Percentage, Pixels, Style, Window,
+    GlobalElementId, InspectorElementId, LayoutId, Length, Percentage, Pixels, Style, Window,
 };
 
 pub struct Clamp {
@@ -62,9 +62,14 @@ impl Element for Clamp {
         None
     }
 
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
@@ -82,6 +87,7 @@ impl Element for Clamp {
     fn prepaint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -96,15 +102,18 @@ impl Element for Clamp {
                 Axis::Horizontal => bounds.size.width,
             },
         );
-        let size = match self.axis {
+        let child_size = match self.axis {
             Axis::Vertical => size(bounds.size.width, clamped_size),
             Axis::Horizontal => size(clamped_size, bounds.size.height),
         };
-        let offset = (bounds.size - size) * px(self.position.0);
+        let offset = point(
+            (bounds.size.width - child_size.width) * self.position.0,
+            (bounds.size.height - child_size.height) * self.position.0,
+        );
 
         self.child.prepaint_as_root(
-            bounds.origin + point(offset.width, offset.height),
-            size.map(AvailableSpace::Definite),
+            bounds.origin + offset,
+            child_size.map(AvailableSpace::Definite),
             window,
             cx,
         );
@@ -113,6 +122,7 @@ impl Element for Clamp {
     fn paint(
         &mut self,
         _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
         _bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         _prepaint: &mut Self::PrepaintState,
@@ -130,13 +140,17 @@ fn smooth_max(max: Pixels, linear_at: Pixels, k: f32, available: Pixels) -> Pixe
         return max;
     }
 
+    let max = max.as_f32();
+    let linear_at = linear_at.as_f32();
+    let available = available.as_f32();
+
     // Use inverse bezier to get lerp from available
     let determinant =
-        (max - linear_at).pow(2.0) + (available - linear_at) * (linear_at + k * max - max);
-    let delta = (available - linear_at) / (max - linear_at + determinant.pow(0.5));
+        (max - linear_at).powf(2.0) + (available - linear_at) * (linear_at + k * max - max);
+    let delta = (available - linear_at) / (max - linear_at + determinant.powf(0.5));
     let inverse_delta = 1.0 - delta;
 
     // Forward bezier to get width
     let lerp = max * delta + linear_at * inverse_delta;
-    lerp * inverse_delta + max * delta
+    px(lerp * inverse_delta + max * delta)
 }

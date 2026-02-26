@@ -4,7 +4,6 @@ use gpui::{
     FocusHandle, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ResizeEdge, Result,
     Size, Tiling, TitlebarOptions, Window, WindowDecorations, WindowHandle, WindowOptions,
 };
-use smallvec::smallvec;
 
 use crate::theme::{ActiveTheme, Theme};
 use crate::titlebar::Titlebar;
@@ -215,7 +214,7 @@ fn csd_div<T: Render>(
         .flex_col()
         .size_full()
         .bg(theme.window_background)
-        .shadow(smallvec![BoxShadow {
+        .shadow(vec![BoxShadow {
             color: if focused {
                 theme.csd_shadow_focused.into()
             } else {
