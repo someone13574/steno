@@ -1,9 +1,8 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{div, App, Entity, EventEmitter, Window};
-use smol::stream::StreamExt;
-use smol::Timer;
+use web_time::Instant;
 
 use crate::text_view::TextView;
 use crate::theme::ActiveTheme;
@@ -51,17 +50,15 @@ impl Counter {
             let mut last_typed_count = 0;
             let mut wpm_measurements = Vec::with_capacity(NUM_SAMPLES as usize + 1);
 
-            let mut timer =
-                Timer::interval_at(start_time, sample_interval.min(Duration::from_millis(100)));
+            let tick_interval = sample_interval.min(Duration::from_millis(100));
             let mut last_sample = Instant::now();
-            timer.next().await;
+            cx.background_executor().timer(tick_interval).await;
 
-            while timer.next().await.is_some() {
+            loop {
+                cx.background_executor().timer(tick_interval).await;
                 let active = counter
                     .update(cx, |counter, cx| {
-                        if last_sample.elapsed().abs_diff(sample_interval)
-                            < Duration::from_millis(10)
-                        {
+                        if last_sample.elapsed() >= sample_interval {
                             let current_typed_count = counter.text_view.read(cx).typed_chars;
                             wpm_measurements.push(
                                 (current_typed_count - last_typed_count) as f32
@@ -69,9 +66,9 @@ impl Counter {
                                     * (60.0 / sample_interval.as_secs_f32()),
                             );
                             last_typed_count = current_typed_count;
-                            last_sample = Instant::now();
+                            last_sample = last_sample + sample_interval;
 
-                            if wpm_measurements.len() + 1 == NUM_SAMPLES as usize {
+                            if wpm_measurements.len() == NUM_SAMPLES as usize {
                                 cx.emit(CounterFinishedEvent {
                                     wpm_measurements: wpm_measurements.clone(),
                                 });

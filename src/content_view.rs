@@ -7,6 +7,7 @@ use crate::components::clamp::clamp;
 use crate::components::line_chart::LineChart;
 use crate::counter::Counter;
 use crate::text_view::TextView;
+use crate::theme::ActiveTheme;
 
 pub struct ContentView {
     text_view: Entity<TextView>,
@@ -36,12 +37,12 @@ impl ContentView {
 }
 
 impl Render for ContentView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
             .size_full()
-            .text_color(gpui::white())
+            .text_color(cx.theme().base.foreground)
             .font_family("Sans")
             .when(self.wpm_measurements.is_none(), |element| {
                 element

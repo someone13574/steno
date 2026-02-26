@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use gpui::prelude::*;
 use gpui::{
     ease_in_out, fill, point, px, relative, size, AnyElement, App, AvailableSpace, BorderStyle,
@@ -7,6 +5,7 @@ use gpui::{
     InspectorElementId, LayoutId, PaintQuad, Path, PathBuilder, Pixels, Point, Size, Style,
     TextStyleRefinement, Window,
 };
+use web_time::Instant;
 
 use crate::theme::ActiveTheme;
 

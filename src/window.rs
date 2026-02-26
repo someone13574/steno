@@ -222,7 +222,7 @@ fn csd_div<T: Render>(
             },
             offset: point(px(0.0), px(0.0)),
             blur_radius: theme.csd_shadow_size / 4.0,
-            spread_radius: px(0.0)
+            spread_radius: px(0.0),
         }])
         .border_color(theme.csd_window_border)
         .when(!tiling.top, |div| {

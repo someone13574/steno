@@ -1,10 +1,9 @@
-use std::time::Instant;
-
 use gpui::prelude::*;
 use gpui::{
     AnyElement, App, Bounds, ElementId, GlobalElementId, InspectorElementId, LayoutId, Pixels,
     Window,
 };
+use web_time::Instant;
 
 use crate::theme::ActiveTheme;
 

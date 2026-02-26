@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=0"
+        />
+        <title>Steno</title>
+        <script>
+            (() => {
+                const applyViewportSize = () => {
+                    const width = Math.max(window.innerWidth || 0, 1);
+                    const height = Math.max(window.innerHeight || 0, 1);
+
+                    document.documentElement.style.width = `${width}px`;
+                    document.documentElement.style.height = `${height}px`;
+
+                    if (document.body) {
+                        document.body.style.width = `${width}px`;
+                        document.body.style.height = `${height}px`;
+                    }
+                };
+
+                window.addEventListener("resize", applyViewportSize, {
+                    passive: true,
+                });
+                window.addEventListener(
+                    "orientationchange",
+                    applyViewportSize,
+                    { passive: true },
+                );
+                document.addEventListener(
+                    "DOMContentLoaded",
+                    applyViewportSize,
+                    { once: true },
+                );
+
+                applyViewportSize();
+
+                if (!navigator.gpu) {
+                    document.addEventListener("DOMContentLoaded", () => {
+                        document.body.classList.add("unsupported");
+                    }, { once: true });
+                }
+            })();
+        </script>
+        <link
+            data-trunk
+            rel="rust"
+            data-bin="steno"
+            data-bindgen-target="web"
+            data-keep-debug
+            data-wasm-opt="0"
+        />
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                margin: 0;
+                width: 100%;
+                height: 100%;
+                min-width: 1px;
+                min-height: 1px;
+                overflow: hidden;
+            }
+
+            body {
+                position: fixed;
+                inset: 0;
+                background: #202020;
+                color: #e0e0e0;
+                font-family: sans-serif;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            canvas {
+                display: block;
+                width: 100vw;
+                height: 100vh;
+                min-width: 1px;
+                min-height: 1px;
+                touch-action: none;
+                outline: none;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            #unsupported {
+                display: none;
+                text-align: center;
+                max-width: 480px;
+                padding: 32px;
+            }
+
+            #unsupported h1 {
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin-bottom: 12px;
+            }
+
+            #unsupported p {
+                color: rgba(255, 255, 255, 0.5);
+                line-height: 1.6;
+            }
+
+            body.unsupported #unsupported {
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="unsupported">
+            <h1>Browser not supported</h1>
+            <p>GPUI requires WebGPU to work on the web.</p>
+        </div>
+    </body>
+</html>

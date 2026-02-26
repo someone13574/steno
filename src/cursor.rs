@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
-use std::time::Instant;
 
 use gpui::prelude::*;
 use gpui::{div, px, Context, Entity, EventEmitter, Hsla, IsZero, Pixels, Point, Window};
+use web_time::Instant;
 
 use crate::components::continuous_animation::ContinuousAnimationExt;
 use crate::text_view::TextView;

@@ -4782,7 +4782,8 @@ dependencies = [
  "gpui_platform",
  "rand 0.9.2",
  "rust-embed",
- "smol",
+ "wasm-bindgen",
+ "web-time",
 ]
 
 [[package]]

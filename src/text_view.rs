@@ -26,17 +26,19 @@ pub struct TextView {
 
 impl TextView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self {
-            text: Dictionary::random_text(50, cx),
-            char_head: 0,
-            utf8_head: 0,
-            typed_chars: 0,
-            over_inserted_stack: vec![0],
-            run_lens: Vec::new(),
-            focus_handle,
-            cursor: Cursor::new(cx),
-            target_scroll: px(0.0),
-            animate_scroll: true,
+        cx.new(|cx| {
+            Self {
+                text: Dictionary::random_text(50, cx),
+                char_head: 0,
+                utf8_head: 0,
+                typed_chars: 0,
+                over_inserted_stack: vec![0],
+                run_lens: Vec::new(),
+                focus_handle,
+                cursor: Cursor::new(cx),
+                target_scroll: px(0.0),
+                animate_scroll: true,
+            }
         })
     }
 
@@ -313,17 +315,19 @@ impl Element for TextViewElement {
         let runs = text_view
             .run_lens
             .iter()
-            .map(|(correct, run_len)| TextRun {
-                len: *run_len,
-                font: text_style.font(),
-                color: if *correct {
-                    cx.theme().text_view_correct_text.into()
-                } else {
-                    cx.theme().text_view_incorrect_text.into()
-                },
-                background_color: None,
-                underline: None,
-                strikethrough: None,
+            .map(|(correct, run_len)| {
+                TextRun {
+                    len: *run_len,
+                    font: text_style.font(),
+                    color: if *correct {
+                        cx.theme().text_view_correct_text.into()
+                    } else {
+                        cx.theme().text_view_incorrect_text.into()
+                    },
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }
             })
             .chain([TextRun {
                 len: text_view.text.len() - text_view.utf8_head,
