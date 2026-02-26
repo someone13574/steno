@@ -7,6 +7,7 @@
             content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=0"
         />
         <title>Steno</title>
+        <script src="coi-serviceworker.js"></script>
         <script>
             (() => {
                 const applyViewportSize = () => {
@@ -39,12 +40,17 @@
                 applyViewportSize();
 
                 if (!navigator.gpu) {
-                    document.addEventListener("DOMContentLoaded", () => {
-                        document.body.classList.add("unsupported");
-                    }, { once: true });
+                    document.addEventListener(
+                        "DOMContentLoaded",
+                        () => {
+                            document.body.classList.add("unsupported");
+                        },
+                        { once: true },
+                    );
                 }
             })();
         </script>
+        <link data-trunk rel="copy-file" href="static/coi-serviceworker.js" />
         <link
             data-trunk
             rel="rust"
