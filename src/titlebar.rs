@@ -31,14 +31,14 @@ impl<V: Render> Render for Titlebar<V> {
             .w_full()
             .items_center()
             .justify_between()
-            .bg(cx.theme().csd_titlebar_background)
-            .border_b(cx.theme().csd_titlebar_border_width)
-            .border_color(cx.theme().csd_titlebar_border)
-            .px(cx.theme().csd_titlebar_padding_x)
-            .py(cx.theme().csd_titlebar_padding_y)
-            .rounded_t(cx.theme().csd_corner_radius)
-            .font_family(cx.theme().csd_font_family)
-            .text_color(cx.theme().csd_foreground)
+            .bg(cx.theme().csd.titlebar_background)
+            .border_b(cx.theme().csd.titlebar_border_width)
+            .border_color(cx.theme().csd.titlebar_border)
+            .px(cx.theme().csd.titlebar_padding_x)
+            .py(cx.theme().csd.titlebar_padding_y)
+            .rounded_t(cx.theme().csd.corner_radius)
+            .font_family(cx.theme().csd.font_family)
+            .text_color(cx.theme().csd.foreground)
             .child(gpui::div())
             .child("Steno")
             .child(
@@ -77,9 +77,9 @@ impl TitlebarButtons {
         cx.new(|cx| {
             let theme_fn = |cx: &mut App| {
                 ButtonTheme {
-                    background: Some(cx.theme().csd_button_background),
-                    background_hover: Some(cx.theme().csd_button_background_hovered),
-                    icon: Some(cx.theme().csd_button_foreground),
+                    background: Some(cx.theme().csd.button_background),
+                    background_hover: Some(cx.theme().csd.button_background_hovered),
+                    icon: Some(cx.theme().csd.button_foreground),
                 }
             };
 
@@ -115,7 +115,7 @@ impl Render for TitlebarButtons {
         div()
             .flex()
             .flex_row()
-            .gap(cx.theme().csd_button_gap)
+            .gap(cx.theme().csd.button_gap)
             .child(self.minimize.clone())
             .child(self.maximize.clone())
             .child(self.close.clone())

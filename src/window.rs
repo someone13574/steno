@@ -58,7 +58,7 @@ impl<V: Render> StenoWindow<V> {
 impl<V: Render> Render for StenoWindow<V> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let decorations = window.window_decorations();
-        let client_inset = cx.theme().csd_shadow_size.max(CSD_RESIZE_EDGE_SIZE);
+        let client_inset = cx.theme().csd.shadow_size.max(CSD_RESIZE_EDGE_SIZE);
 
         if let Decorations::Client { .. } = decorations {
             window.set_client_inset(client_inset);
@@ -95,7 +95,7 @@ impl<V: Render> Render for StenoWindow<V> {
                                         event.position,
                                         window.bounds().size,
                                         tiling,
-                                        cx.theme().csd_shadow_size,
+                                        cx.theme().csd.shadow_size,
                                     ) {
                                         resize_edge_cursor(edge)
                                     } else {
@@ -116,7 +116,7 @@ impl<V: Render> Render for StenoWindow<V> {
                                         event.position,
                                         window.bounds().size,
                                         tiling,
-                                        cx.theme().csd_shadow_size,
+                                        cx.theme().csd.shadow_size,
                                     ) {
                                         window.start_window_resize(edge);
                                         this.active_csd_event = true;
@@ -222,38 +222,38 @@ fn csd_div<T: Render>(
         .bg(theme.window_background)
         .shadow(vec![BoxShadow {
             color: if focused {
-                theme.csd_shadow_focused.into()
+                theme.csd.shadow_focused.into()
             } else {
-                theme.csd_shadow_unfocused.into()
+                theme.csd.shadow_unfocused.into()
             },
             offset: point(px(0.0), px(0.0)),
-            blur_radius: theme.csd_shadow_size / 4.0,
+            blur_radius: theme.csd.shadow_size / 4.0,
             spread_radius: px(0.0),
         }])
-        .border_color(theme.csd_window_border)
+        .border_color(theme.csd.window_border)
         .when(!tiling.top, |div| {
-            div.border_t(theme.csd_window_border_width)
+            div.border_t(theme.csd.window_border_width)
         })
         .when(!tiling.bottom, |div| {
-            div.border_b(theme.csd_window_border_width)
+            div.border_b(theme.csd.window_border_width)
         })
         .when(!tiling.left, |div| {
-            div.border_l(theme.csd_window_border_width)
+            div.border_l(theme.csd.window_border_width)
         })
         .when(!tiling.right, |div| {
-            div.border_r(theme.csd_window_border_width)
+            div.border_r(theme.csd.window_border_width)
         })
         .when(!tiling.top && !tiling.left, |div| {
-            div.rounded_tl(theme.csd_corner_radius)
+            div.rounded_tl(theme.csd.corner_radius)
         })
         .when(!tiling.top && !tiling.right, |div| {
-            div.rounded_tr(theme.csd_corner_radius)
+            div.rounded_tr(theme.csd.corner_radius)
         })
         .when(!tiling.bottom && !tiling.left, |div| {
-            div.rounded_bl(theme.csd_corner_radius)
+            div.rounded_bl(theme.csd.corner_radius)
         })
         .when(!tiling.bottom && !tiling.right, |div| {
-            div.rounded_br(theme.csd_corner_radius)
+            div.rounded_br(theme.csd.corner_radius)
         })
         .cursor_default()
         .on_mouse_move(|_, _, cx| cx.stop_propagation())

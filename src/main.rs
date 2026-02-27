@@ -54,7 +54,7 @@ impl Render for MainView {
             .justify_center()
             .items_center()
             .bg(cx.theme().window_background)
-            .p(cx.theme().csd_corner_radius)
+            .p(cx.theme().base.radius_large)
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _event, window, cx| {
