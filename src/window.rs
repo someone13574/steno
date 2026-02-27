@@ -66,6 +66,12 @@ impl<V: Render> Render for StenoWindow<V> {
 
         div()
             .track_focus(&self.focus_handle)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _event, window, cx| {
+                    this.focus_handle.focus(window, cx);
+                }),
+            )
             .size_full()
             .bg(transparent_black())
             .map(|element| {

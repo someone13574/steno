@@ -8,7 +8,7 @@ use dictionary::Dictionary;
 use gpui::prelude::*;
 #[cfg(target_family = "wasm")]
 use gpui::WindowOptions;
-use gpui::{div, px, App, Entity, FocusHandle, Window};
+use gpui::{div, px, App, Entity, FocusHandle, MouseButton, Window};
 use gpui_platform::application;
 use theme::{ActiveTheme, BaseTheme, Theme};
 #[cfg(not(target_family = "wasm"))]
@@ -32,13 +32,15 @@ pub const APP_ID: &str = "com.github.someone13574.steno";
 
 pub struct MainView {
     content_view: Entity<ContentView>,
+    focus_handle: FocusHandle,
 }
 
 impl MainView {
     pub fn new(focus_handle: FocusHandle, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             Self {
-                content_view: ContentView::new(focus_handle, cx),
+                content_view: ContentView::new(focus_handle.clone(), cx),
+                focus_handle,
             }
         })
     }
@@ -53,6 +55,12 @@ impl Render for MainView {
             .items_center()
             .bg(cx.theme().window_background)
             .p(cx.theme().csd_corner_radius)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _event, window, cx| {
+                    this.focus_handle.focus(window, cx);
+                }),
+            )
             .child(clamp(px(1600.0), px(300.0), self.content_view.clone()))
     }
 }
