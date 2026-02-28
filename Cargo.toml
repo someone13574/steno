@@ -9,10 +9,10 @@ rust-embed = { version = "8.5.0", features = ["debug-embed", "include-exclude"] 
 web-time = "1.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-gpui = { git = "https://github.com/someone13574/zed", branch = "firefox-crash", features = ["wayland", "x11"] }
-gpui_platform = { git = "https://github.com/someone13574/zed", branch = "firefox-crash", features = ["wayland", "x11"] }
+gpui = { git = "https://github.com/someone13574/zed", branch = "web-resizing", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/someone13574/zed", branch = "web-resizing", features = ["wayland", "x11"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui = { git = "https://github.com/someone13574/zed", branch = "firefox-crash", default-features = false }
-gpui_platform = { git = "https://github.com/someone13574/zed", branch = "firefox-crash" }
+gpui = { git = "https://github.com/someone13574/zed", branch = "web-resizing", default-features = false }
+gpui_platform = { git = "https://github.com/someone13574/zed", branch = "web-resizing" }
 wasm-bindgen = "0.2"
